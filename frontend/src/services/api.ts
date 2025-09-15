@@ -1,6 +1,6 @@
 
 
-let BASE_URL =   'http://localhost:5000/api';
+let BASE_URL =  import.meta.env.VITE_APP_API_BASE_URL ||  'http://localhost:5000/api';
 if (!BASE_URL.endsWith('/api')) {
   BASE_URL = `${BASE_URL}/api`;
 }

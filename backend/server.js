@@ -175,7 +175,7 @@ logger.info('Payment reminder cron job scheduled to run daily at midnight.');
 // --- Security Middleware ---
 app.use(helmet());
 app.use(cors({
-    origin: "*",
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
     optionsSuccessStatus: 200,
