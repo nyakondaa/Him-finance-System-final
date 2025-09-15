@@ -175,7 +175,7 @@ logger.info('Payment reminder cron job scheduled to run daily at midnight.');
 // --- Security Middleware ---
 app.use(helmet());
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: "*",
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
     optionsSuccessStatus: 200,
@@ -4002,6 +4002,7 @@ function getAvailablePrinters() {
 }
 
 
+/*
 
 function printToPrinter(printerName, text, copies = 1) {
   return new Promise((resolve, reject) => {
@@ -4128,6 +4129,8 @@ app.post("/api/print", async (req, res) => {
   }
 });
 
+*/
+
 
 // List available printers (sanitized)
 app.get('/api/printers', async (req, res) => {
@@ -4150,6 +4153,34 @@ app.get('/api/printers', async (req, res) => {
 });
 
 
+
+app.get("/api/receipt/:id", (req, res) => {
+  const { id } = req.params;
+
+  // Example: fetch transaction data from DB
+  const receipt = {
+    id,
+    customer: "John Doe",
+    amount: 45.75,
+    date: new Date().toLocaleString(),
+  };
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename=receipt-${id}.pdf`);
+
+  const doc = new PDFDocument();
+  doc.pipe(res);
+
+  doc.fontSize(16).text("Receipt", { align: "center" });
+  doc.moveDown();
+
+  doc.fontSize(12).text(`Receipt #: RC${id}`);
+  doc.text(`Customer: ${receipt.customer}`);
+  doc.text(`Amount: $${receipt.amount}`);
+  doc.text(`Date: ${receipt.date}`);
+
+  doc.end();
+});
 
 
 

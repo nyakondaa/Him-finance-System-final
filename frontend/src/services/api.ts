@@ -1,6 +1,6 @@
 
 
-let BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || 'http://localhost:5000/api';
+let BASE_URL =   'http://localhost:5000/api';
 if (!BASE_URL.endsWith('/api')) {
   BASE_URL = `${BASE_URL}/api`;
 }
@@ -69,6 +69,11 @@ export const printDocument = async (printerName: string, text: string, copies: n
   const n = Math.max(1, parseInt(String(copies), 10) || 1);
   const data = await apiClient('/print', 'POST', { printer: printerName, text, copies: n });
   return data.message;
+};
+
+
+export const fetchReceiptPdf = async (receiptId: string | number) => {
+  return await apiClient(`/receipt/${receiptId}`, 'GET', null, { isBlob: true });
 };
 
 
