@@ -639,6 +639,9 @@ const ReceiptingPage = () => {
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState(null);
 
+  // Toast state
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState({
@@ -727,6 +730,13 @@ const ReceiptingPage = () => {
     setIsModalOpen(true);
   };
 
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ visible: true, message, type });
+    window.setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 2500);
+  };
+
   // Client-side printing function using html2canvas and jspdf
   const handlePdfPrint = useCallback(async () => {
     const element = printContentRef.current;
@@ -758,9 +768,10 @@ const ReceiptingPage = () => {
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.autoPrint();
       window.open(pdf.output('bloburl'), '_blank');
-      
-      showModal("Receipt printed successfully! A new window with the PDF should have opened.", "Success", "success");
-      
+      showToast("Receipt ready to print.");
+      // Do not show blocking modal on success to avoid dark overlay during printing
+      // Consider replacing with a non-blocking toast in the future
+
       setTimeout(() => {
         setReceipt({
           payerName: "",
@@ -837,9 +848,9 @@ const ReceiptingPage = () => {
     <div className="min-h-screen bg-white flex flex-col p-4">
       {/* Hidden print content for browser printing */}
       <div ref={printContentRef} className="print-container absolute top-0 left-0 w-[80mm] p-2" style={{ position: 'absolute', top: -9999, left: -9999, color: 'black', backgroundColor: 'white' }}>
-        <div className="receipt font-mono text-sm leading-tight">
-          <div className="center font-bold text-center mb-2">HIM Finance System</div>
-          <div className="center text-center">================================</div>
+        <div className="receipt font-mono text-sm leading-tight text-center">
+          <div className="font-bold mb-2">HIM Finance System</div>
+          <div>================================</div>
           <div><span className="bold font-bold">Receipt #:</span> {"RC" + Math.floor(100000 + Math.random() * 900000)}</div>
           <div><span className="bold font-bold">Payer:</span> {receipt.payerName || "---"}</div>
           <div><span className="bold font-bold">Revenue:</span> {revenueHeads.find(r => r.code === receipt.revenueHeadCode)?.name || "---"}</div>
@@ -849,8 +860,8 @@ const ReceiptingPage = () => {
           <div><span className="bold font-bold">Operator:</span> {loggedInUser || "---"}</div>
           <div><span className="bold font-bold">Date:</span> {new Date().toLocaleString()}</div>
           <div className="divider border-t border-dashed my-2" style={{ borderColor: 'black' }}></div>
-          <div className="center italic mt-2 text-center">Thank you for your support!</div>
-          <div className="center text-center">May God bless you abundantly.</div>
+          <div className="italic mt-2">Thank you for your support!</div>
+          <div>May God bless you abundantly.</div>
           <div className="divider border-t border-dashed my-2" style={{ borderColor: 'black' }}></div>
         </div>
       </div>
@@ -862,6 +873,17 @@ const ReceiptingPage = () => {
         type={modalContent.type}
         onClose={() => setIsModalOpen(false)}
       />
+
+      {/* Toast */}
+      {toast.visible && (
+        <div
+          className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-white transition-opacity duration-200 ${
+            toast.type === 'error' ? 'bg-red-600' : toast.type === 'info' ? 'bg-blue-600' : 'bg-green-600'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
 
       <div className="flex-grow p-4">
         <div className="max-w-7xl mx-auto">
@@ -1026,9 +1048,9 @@ const ReceiptingPage = () => {
             {/* Preview Section */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
               <h3 className="text-xl font-semibold mb-6 text-gray-700">Receipt Preview</h3>
-              <div className="border p-4 rounded-lg bg-gray-50 font-mono text-sm leading-tight">
-                <div className="text-center font-bold mb-2">HIM Finance System</div>
-                <div className="text-center">================================</div>
+              <div className="border p-4 rounded-lg bg-gray-50 font-mono text-sm leading-tight text-center">
+                <div className="font-bold mb-2">HIM Finance System</div>
+                <div>================================</div>
                 <div>Receipt #: {"RC" + Math.floor(100000 + Math.random() * 900000)}</div>
                 <div>Payer: {receipt.payerName || "---"}</div>
                 <div>
@@ -1047,7 +1069,7 @@ const ReceiptingPage = () => {
                 </div>
                 <div>Operator: {loggedInUser || "---"}</div>
                 <div>Date: {new Date().toLocaleString()}</div>
-                <div className="mt-2 text-center italic">Thank you for your support!</div>
+                <div className="mt-2 italic">Thank you for your support!</div>
               </div>
             </div>
           </div>
