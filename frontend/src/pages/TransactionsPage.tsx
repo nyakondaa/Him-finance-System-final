@@ -38,10 +38,21 @@ const formatDate = (dateString: string | number | Date) => {
   });
 };
 
-const formatCurrency = (amount: number, currency: string = "USD") => {
+const formatCurrency = (
+  amount: number,
+  currency: string | { code?: string } | null | undefined = "USD"
+) => {
+  // Extract currency code safely, default to USD if missing
+  const currencyCode =
+    typeof currency === "string"
+      ? currency
+      : currency && currency.code
+      ? currency.code
+      : "USD";
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: currency,
+    currency: currencyCode,
     minimumFractionDigits: 2,
   }).format(amount || 0);
 };
@@ -176,11 +187,20 @@ const TransactionsPage = () => {
                   <TableCell>
                     {formatDate(transaction.transactionDate)}
                   </TableCell>
-                  <TableCell>{transaction.payerName}</TableCell>
+                  <TableCell>
+                    {transaction.payerName ||
+                      `${transaction.member?.firstName || ""} ${
+                        transaction.member?.lastName || ""
+                      }`}
+                  </TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(transaction.amount, transaction.currency)}
                   </TableCell>
-                  <TableCell>{transaction.paymentMethod || "Card"}</TableCell>
+                  <TableCell>
+                    {transaction.paymentMethod?.name ||
+                      transaction.paymentMethod ||
+                      "Card"}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(transaction.status)}>
                       {transaction.status}

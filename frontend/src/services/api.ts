@@ -1,6 +1,7 @@
 
 
-let BASE_URL =  import.meta.env.VITE_APP_API_BASE_URL ||  'http://localhost:5000/api';
+//let BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || 'http://localhost:5000/api';
+let BASE_URL =   'http://localhost:5000/api';
 if (!BASE_URL.endsWith('/api')) {
   BASE_URL = `${BASE_URL}/api`;
 }
@@ -174,6 +175,7 @@ export const updateBudgetLine = (budgetId: any, lineData: any) => apiClient(`/bu
 export const getTransactions = (params = {}) => apiClient(`/transactions?${new URLSearchParams(params)}`);
 export const getTransactionById = (id: string) => apiClient(`/transactions/${id}`);
 export const createTransaction = (transactionData: { payerName: string; revenueHeadCode: string; amount: number; currency: string; paymentMethod: string; branchCode: string; operatorName: any; }) => apiClient('/transactions', 'POST', transactionData);
+export const generateReceipt = (transactionData: { memberId: number; revenueHeadCode: string; amount: number; currencyCode: string; paymentMethodId: number; referenceNumber?: string; notes?: string ; transactionDate?: string; }) => apiClient('/generate-receipt', 'POST', transactionData);
 export const refundTransaction = (id: string, refundData: { reason: string; processedBy: string; }) => apiClient(`/transactions/${id}/refund`, 'POST', refundData);
 
 // --- CURRENCY AND PAYMENT METHODS ---
@@ -218,3 +220,33 @@ export const getExchangeRateById = (id: any) => apiClient(`/exchange-rates/${id}
 // --- QZ TRAY ---
 export const getQZCertificate = () => apiClient('/qz/certificate');
 export const signQZData = (dataToSign: any) => apiClient('/qz/sign', 'POST', { dataToSign });
+
+// --- ORGANIZATION MANAGEMENT ---
+export const getOrganizations = () => apiClient('/organizations');
+export const getOrganizationById = (id: any) => apiClient(`/organizations/${id}`);
+export const createOrganization = (organizationData: any) => apiClient('/organizations', 'POST', organizationData);
+export const updateOrganization = (id: any, organizationData: any) => apiClient(`/organizations/${id}`, 'PATCH', organizationData);
+export const deleteOrganization = (id: any) => apiClient(`/organizations/${id}`, 'DELETE');
+export const getOrganizationStats = (id: any, period = 'month') => apiClient(`/organizations/${id}/stats?period=${period}`);
+export const switchOrganization = (id: any) => apiClient(`/organizations/${id}/switch`, 'POST');
+
+// --- STUDENT MANAGEMENT (School-specific) ---
+export const getStudents = (params = {}) => apiClient(`/students?${new URLSearchParams(params)}`);
+export const getStudentById = (id: any) => apiClient(`/students/${id}`);
+export const createStudent = (studentData: any) => apiClient('/students', 'POST', studentData);
+export const updateStudent = (id: any, studentData: any) => apiClient(`/students/${id}`, 'PATCH', studentData);
+export const deleteStudent = (id: any) => apiClient(`/students/${id}`, 'DELETE');
+export const getStudentFeePayments = (id: any, params = {}) => apiClient(`/students/${id}/fee-payments?${new URLSearchParams(params)}`);
+export const getStudentBalances = (id: any) => apiClient(`/students/${id}/balances`);
+export const createStudentFeePayment = (id: any, paymentData: any) => apiClient(`/students/${id}/fee-payments`, 'POST', paymentData);
+
+// --- FEE MANAGEMENT (School-specific) ---
+export const getAcademicYears = () => apiClient('/fees/academic-years');
+export const createAcademicYear = (academicYearData: any) => apiClient('/fees/academic-years', 'POST', academicYearData);
+export const getFeeCategories = () => apiClient('/fees/categories');
+export const createFeeCategory = (categoryData: any) => apiClient('/fees/categories', 'POST', categoryData);
+export const getFeeStructures = (params = {}) => apiClient(`/fees/structures?${new URLSearchParams(params)}`);
+export const getFeeStructureById = (id: any) => apiClient(`/fees/structures/${id}`);
+export const createFeeStructure = (structureData: any) => apiClient('/fees/structures', 'POST', structureData);
+export const getFeeCollectionReport = (params = {}) => apiClient(`/fees/reports/collection?${new URLSearchParams(params)}`);
+export const getOutstandingFeesReport = (params = {}) => apiClient(`/fees/reports/outstanding?${new URLSearchParams(params)}`);

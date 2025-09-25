@@ -1,38 +1,18 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   TrendingUp,
-  TrendingDown,
   DollarSign,
   Users,
   Building,
-  Calendar,
-  Clock,
   CreditCard,
-  Smartphone,
-  Banknote,
-  PiggyBank,
   Target,
   Activity,
-  Zap,
   Award,
-  Eye,
   BarChart3,
-  PieChart,
   ArrowUpRight,
   ArrowDownRight,
-  Plus,
-  Minus,
-  AlertTriangle,
-  CheckCircle,
   RefreshCw,
-  Filter,
-  Download,
-  Settings,
-  Bell,
-  Search,
-  MapPin,
-  Timer,
   Wallet,
   Receipt,
   Star,
@@ -41,11 +21,8 @@ import {
   Square,
   CheckSquare,
 } from "lucide-react";
+import { Suspense } from "react";
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -56,9 +33,15 @@ import {
   Cell,
   AreaChart,
   Area,
-  RadialBarChart,
-  RadialBar,
+  BarChart,
+  Bar,
 } from "recharts";
+
+// Lazy load chart components (unused for now but available for future use)
+// const LineChart = lazy(() => import("recharts").then(module => ({ default: module.LineChart })));
+// const Line = lazy(() => import("recharts").then(module => ({ default: module.Line })));
+// const RadialBarChart = lazy(() => import("recharts").then(module => ({ default: module.RadialBarChart })));
+// const RadialBar = lazy(() => import("recharts").then(module => ({ default: module.RadialBar })));
 import {
   getTransactions,
   getUsers,
@@ -69,12 +52,47 @@ import {
 } from "../services/api";
 import useAuth from "../hooks/useAuth";
 
-const Dashboard = ({ showModal }) => {
+// Debounce hook for performance optimization
+const useDebounce = (value: any, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+};
+
+// Helper functions for styling and formatting (moved outside component for memoization)
+const getPerformanceColor = (change: number) => {
+  if (change > 10) return "text-green-600 bg-green-50";
+  if (change > 0) return "text-green-500 bg-green-50";
+  if (change < -10) return "text-red-600 bg-red-50";
+  if (change < 0) return "text-red-500 bg-red-50";
+  return "text-gray-600 bg-gray-50";
+};
+
+const getPerformanceIcon = (change: number) => {
+  if (change > 0) return <ArrowUpRight className="w-4 h-4" />;
+  if (change < 0) return <ArrowDownRight className="w-4 h-4" />;
+  return <Activity className="w-4 h-4" />;
+};
+
+const Dashboard = () => {
   
   const [selectedPeriod, setSelectedPeriod] = useState("today");
   const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [isDefaultCurrency, setIsDefaultCurrency] = useState(false);
-  const [viewMode, setViewMode] = useState("overview");
+
+  // Debounce period and currency changes to reduce re-renders
+  const debouncedPeriod = useDebounce(selectedPeriod, 300);
+  const debouncedCurrency = useDebounce(selectedCurrency, 300);
 
  
 
@@ -95,7 +113,7 @@ const Dashboard = ({ showModal }) => {
     }
   }, [isDefaultCurrency, selectedCurrency]);
 
-  // Fetch all data
+  // Fetch all data with optimized configurations
   const {
     data: transactionsData,
     isLoading: loadingTransactions,
@@ -104,33 +122,24 @@ const Dashboard = ({ showModal }) => {
   } = useQuery({
     queryKey: ["transactions"],
     queryFn: getTransactions,
-    refetchInterval: 30000,
-    onError: (err) => {
-      console.error("Failed to load transactions:", err);
-      if (showModal) {
-        showModal(err.message || "Failed to load transactions.", "Error");
-      }
-    },
-    retry: 2,
-    staleTime: 5 * 60 * 1000,
+    refetchInterval: 60000, // Reduced frequency from 30s to 60s
+    retry: 1, // Reduced retries
+    staleTime: 10 * 60 * 1000, // Increased stale time to 10 minutes
+    gcTime: 15 * 60 * 1000, // Cache for 15 minutes
+    refetchOnWindowFocus: false, // Disable refetch on window focus
   });
 
   const {
-    data: usersData,
     isLoading: loadingUsers,
     isError: isErrorUsers,
     error: usersError,
   } = useQuery({
     queryKey: ["users"],
     queryFn: getUsers,
-    onError: (err) => {
-      console.error("Failed to load users:", err);
-      if (showModal) {
-        showModal(err.message || "Failed to load users.", "Error");
-      }
-    },
-    retry: 2,
-    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    staleTime: 15 * 60 * 1000, // Increased to 15 minutes
+    gcTime: 30 * 60 * 1000, // Cache for 30 minutes
+    refetchOnWindowFocus: false,
   });
 
   const {
@@ -141,39 +150,31 @@ const Dashboard = ({ showModal }) => {
   } = useQuery({
     queryKey: ["branches"],
     queryFn: getBranches,
-    onError: (err) => {
-      console.error("Failed to load branches:", err);
-      if (showModal) {
-        showModal(err.message || "Failed to load branches.", "Error");
-      }
-    },
-    retry: 2,
-    staleTime: 10 * 60 * 1000,
+    retry: 1,
+    staleTime: 30 * 60 * 1000, // Increased to 30 minutes
+    gcTime: 60 * 60 * 1000, // Cache for 1 hour
+    refetchOnWindowFocus: false,
   });
 
   const {
-    data: revenueHeadsData,
     isLoading: loadingRevenueHeads,
     isError: isErrorRevenueHeads,
     error: revenueHeadsError,
   } = useQuery({
     queryKey: ["revenueHeads"],
     queryFn: getRevenueHeads,
-    onError: (err) => {
-      console.error("Failed to load revenue heads:", err);
-      if (showModal) {
-        showModal(err.message || "Failed to load revenue heads.", "Error");
-      }
-    },
-    retry: 2,
-    staleTime: 10 * 60 * 1000,
+    retry: 1,
+    staleTime: 30 * 60 * 1000, // Increased to 30 minutes
+    gcTime: 60 * 60 * 1000, // Cache for 1 hour
+    refetchOnWindowFocus: false,
   });
 
 
 const {userPermissions, isLoading: authLoading } = useAuth();
-const hasPermission = (resource, action) => {
+const hasPermission = useCallback((resource: string, action: string) => {
   return userPermissions && userPermissions[resource]?.includes(action);
-};
+}, [userPermissions]);
+
 // The key change: add permissions to the queryKey
 const {
     data: currenciesData,
@@ -185,11 +186,10 @@ const {
     queryFn: getCurrencies,
     // The enabled check is still necessary
     enabled: hasPermission('currencies', 'read') && !authLoading,
-    onError: (err) => {
-        console.error("Failed to load currencies:", err);
-    },
-    retry: 2,
+    retry: 1,
     staleTime: 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000, // Cache for 2 hours
+    refetchOnWindowFocus: false,
 });
 
   const {
@@ -200,14 +200,10 @@ const {
   } = useQuery({
     queryKey: ["paymentMethods"],
     queryFn: getPaymentMethods,
-    onError: (err) => {
-      console.error("Failed to load payment methods:", err);
-      if (showModal) {
-        showModal(err.message || "Failed to load payment methods.", "Error");
-      }
-    },
-    retry: 2,
+    retry: 1,
     staleTime: 60 * 60 * 1000, // 1 hour cache for payment methods
+    gcTime: 2 * 60 * 60 * 1000, // Cache for 2 hours
+    refetchOnWindowFocus: false,
   });
 
   // Process data - All useMemo hooks should be unconditional
@@ -215,57 +211,57 @@ const {
     if (!transactionsData) return [];
     const data = Array.isArray(transactionsData)
       ? transactionsData
-      : transactionsData.transactions || transactionsData.data || [];
-    return data.map((t) => ({
+      : (transactionsData as any).transactions || (transactionsData as any).data || [];
+    return data.map((t: any) => ({
       ...t,
       amount: parseFloat(t.amount) || 0,
       transactionDate: new Date(t.transactionDate),
     }));
   }, [transactionsData]);
 
-  const users = useMemo(() => {
-    if (!usersData) return [];
-    return Array.isArray(usersData)
-      ? usersData
-      : usersData.users || usersData.data || [];
-  }, [usersData]);
+  // const users = useMemo(() => {
+  //   if (!usersData) return [];
+  //   return Array.isArray(usersData)
+  //     ? usersData
+  //     : (usersData as any).users || (usersData as any).data || [];
+  // }, [usersData]);
 
   const branches = useMemo(() => {
     if (!branchesData) return [];
     return Array.isArray(branchesData)
       ? branchesData
-      : branchesData.branches || branchesData.data || [];
+      : (branchesData as any).branches || (branchesData as any).data || [];
   }, [branchesData]);
 
-  const revenueHeads = useMemo(() => {
-    if (!revenueHeadsData) return [];
-    return Array.isArray(revenueHeadsData)
-      ? revenueHeadsData
-      : revenueHeadsData.revenueHeads || revenueHeadsData.data || [];
-  }, [revenueHeadsData]);
+  // const revenueHeads = useMemo(() => {
+  //   if (!revenueHeadsData) return [];
+  //   return Array.isArray(revenueHeadsData)
+  //     ? revenueHeadsData
+  //     : (revenueHeadsData as any).revenueHeads || (revenueHeadsData as any).data || [];
+  // }, [revenueHeadsData]);
 
   const currencies = useMemo(() => {
     if (!currenciesData) return [];
     return Array.isArray(currenciesData)
       ? currenciesData
-      : currenciesData.currencies || currenciesData.data || [];
+      : (currenciesData as any).currencies || (currenciesData as any).data || [];
   }, [currenciesData]);
 
   const paymentMethods = useMemo(() => {
     if (!paymentMethodsData) return [];
     return Array.isArray(paymentMethodsData)
       ? paymentMethodsData
-      : paymentMethodsData.paymentMethods || paymentMethodsData.data || [];
+      : (paymentMethodsData as any).paymentMethods || (paymentMethodsData as any).data || [];
   }, [paymentMethodsData]);
 
   // Get available currencies - this must be unconditional
   const availableCurrencies = useMemo(() => {
     if (currencies.length > 0) {
-      return currencies.map((c) => c.code).sort();
+      return currencies.map((c: any) => c.code).sort();
     }
 
     const currenciesSet = new Set(
-      transactions.map((t) => t.currency).filter(Boolean)
+      transactions.map((t: any) => t.currency).filter(Boolean)
     );
     const sortedCurrencies = Array.from(currenciesSet).sort();
     if (!sortedCurrencies.includes("USD")) {
@@ -275,7 +271,7 @@ const {
   }, [transactions, currencies]);
 
   // Get date ranges for current and previous periods
-  const getDateRange = (period) => {
+  const getDateRange = (period: string) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
@@ -332,13 +328,13 @@ const {
     }
   };
 
-  const { start: currentStart, end: currentEnd } = getDateRange(selectedPeriod);
+  const { start: currentStart, end: currentEnd } = getDateRange(debouncedPeriod);
   const { start: prevStart, end: prevEnd } = getDateRange(
-    selectedPeriod === "today"
+    debouncedPeriod === "today"
       ? "yesterday"
-      : selectedPeriod === "week"
+      : debouncedPeriod === "week"
       ? "prevWeek"
-      : selectedPeriod === "month"
+      : debouncedPeriod === "month"
       ? "prevMonth"
       : "today"
   );
@@ -346,30 +342,30 @@ const {
   // Filter transactions for the current and previous periods
   const currentTransactions = useMemo(() => {
     return transactions.filter(
-      (t) =>
-        t.currency === selectedCurrency &&
+      (t: any) =>
+        t.currency === debouncedCurrency &&
         t.transactionDate >= currentStart &&
         t.transactionDate <= currentEnd
     );
-  }, [transactions, selectedCurrency, currentStart, currentEnd]);
+  }, [transactions, debouncedCurrency, currentStart, currentEnd]);
 
   const previousTransactions = useMemo(() => {
     return transactions.filter(
-      (t) =>
-        t.currency === selectedCurrency &&
+      (t: any) =>
+        t.currency === debouncedCurrency &&
         t.transactionDate >= prevStart &&
         t.transactionDate <= prevEnd
     );
-  }, [transactions, selectedCurrency, prevStart, prevEnd]);
+  }, [transactions, debouncedCurrency, prevStart, prevEnd]);
 
   // Calculate core metrics for the selected period
   const metrics = useMemo(() => {
     const currentRevenue = currentTransactions.reduce(
-      (sum, t) => sum + t.amount,
+      (sum: number, t: any) => sum + t.amount,
       0
     );
     const previousRevenue = previousTransactions.reduce(
-      (sum, t) => sum + t.amount,
+      (sum: number, t: any) => sum + t.amount,
       0
     );
     const revenueChange =
@@ -399,7 +395,7 @@ const {
         : ((avgTransaction - prevAvgTransaction) / prevAvgTransaction) * 100;
 
     const uniquePayersSet = new Set(
-      currentTransactions.map((t) => t.payerName).filter(Boolean)
+      currentTransactions.map((t: any) => t.payerName).filter(Boolean)
     );
     const uniquePayers = uniquePayersSet.size;
 
@@ -419,8 +415,8 @@ const {
 
   // Payment methods analysis
   const paymentMethodsChartData = useMemo(() => {
-    const methods = {};
-    currentTransactions.forEach((t) => {
+    const methods: any = {};
+    currentTransactions.forEach((t: any) => {
       const method = t.paymentMethod || "Unknown";
       if (!methods[method]) {
         methods[method] = { name: method, value: 0, count: 0, color: "" };
@@ -441,11 +437,11 @@ const {
       "#6B7280",
     ];
     return Object.values(methods)
-      .map((method, index) => ({
+      .map((method: any, index: number) => ({
         ...method,
         color: colors[index % colors.length],
       }))
-      .sort((a, b) => b.value - a.value);
+      .sort((a: any, b: any) => b.value - a.value);
   }, [currentTransactions]);
 
   // Hourly data for charts
@@ -457,7 +453,7 @@ const {
       transactions: 0,
     }));
 
-    currentTransactions.forEach((t) => {
+    currentTransactions.forEach((t: any) => {
       const hour = t.transactionDate.getHours();
       if (hours[hour]) {
         hours[hour].revenue += t.amount;
@@ -468,38 +464,38 @@ const {
     return hours;
   }, [currentTransactions]);
 
-  // Top 5 revenue heads for the current period
-  const topRevenueHeads = useMemo(() => {
-    const revenueHeadTotals = {};
-    currentTransactions.forEach((t) => {
-      const revenueHeadCode = t.revenueHeadCode;
-      const amount = t.amount;
-      if (revenueHeadCode) {
-        revenueHeadTotals[revenueHeadCode] =
-          (revenueHeadTotals[revenueHeadCode] || 0) + amount;
-      }
-    });
+  // Top 5 revenue heads for the current period (unused for now)
+  // const topRevenueHeads = useMemo(() => {
+  //   const revenueHeadTotals: any = {};
+  //   currentTransactions.forEach((t: any) => {
+  //     const revenueHeadCode = t.revenueHeadCode;
+  //     const amount = t.amount;
+  //     if (revenueHeadCode) {
+  //       revenueHeadTotals[revenueHeadCode] =
+  //         (revenueHeadTotals[revenueHeadCode] || 0) + amount;
+  //     }
+  //   });
 
-    const sortedRevenueHeads = Object.entries(revenueHeadTotals)
-      .map(([code, total]) => {
-        const head = revenueHeads.find((rh) => rh.code === code);
-        return {
-          name: head?.name || `Unknown Head (${code})`,
-          total: total,
-        };
-      })
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
+  //   const sortedRevenueHeads = Object.entries(revenueHeadTotals)
+  //     .map(([code, total]) => {
+  //       const head = revenueHeads.find((rh: any) => rh.code === code);
+  //       return {
+  //         name: head?.name || `Unknown Head (${code})`,
+  //         total: total,
+  //       };
+  //     })
+  //     .sort((a: any, b: any) => b.total - a.total)
+  //     .slice(0, 5);
 
-    return sortedRevenueHeads;
-  }, [currentTransactions, revenueHeads]);
+  //   return sortedRevenueHeads;
+  // }, [currentTransactions, revenueHeads]);
 
   // Top 5 payers for the current period with transaction count
   const topPayers = useMemo(() => {
-    const payerTotals = {};
-    const payerCounts = {};
+    const payerTotals: any = {};
+    const payerCounts: any = {};
 
-    currentTransactions.forEach((t) => {
+    currentTransactions.forEach((t: any) => {
       const payerName = t.payerName || "Unknown Payer";
       const amount = t.amount;
       payerTotals[payerName] = (payerTotals[payerName] || 0) + amount;
@@ -512,26 +508,26 @@ const {
         total,
         count: payerCounts[name] || 0,
       }))
-      .sort((a, b) => b.total - a.total)
+      .sort((a: any, b: any) => b.total - a.total)
       .slice(0, 5);
   }, [currentTransactions]);
 
   // Transaction Value Distribution data for chart
   const transactionValueDistributionData = useMemo(() => {
     const bins = [
-      { name: `< ${selectedCurrency} 50`, min: 0, max: 50, count: 0 },
-      { name: `${selectedCurrency} 50 - 200`, min: 50, max: 200, count: 0 },
-      { name: `${selectedCurrency} 200 - 500`, min: 200, max: 500, count: 0 },
-      { name: `${selectedCurrency} 500 - 1000`, min: 500, max: 1000, count: 0 },
+      { name: `< ${debouncedCurrency} 50`, min: 0, max: 50, count: 0 },
+      { name: `${debouncedCurrency} 50 - 200`, min: 50, max: 200, count: 0 },
+      { name: `${debouncedCurrency} 200 - 500`, min: 200, max: 500, count: 0 },
+      { name: `${debouncedCurrency} 500 - 1000`, min: 500, max: 1000, count: 0 },
       {
-        name: `> ${selectedCurrency} 1000`,
+        name: `> ${debouncedCurrency} 1000`,
         min: 1000,
         max: Infinity,
         count: 0,
       },
     ];
 
-    currentTransactions.forEach((t) => {
+    currentTransactions.forEach((t: any) => {
       const amount = t.amount;
       for (let i = 0; i < bins.length; i++) {
         if (amount >= bins[i].min && amount < bins[i].max) {
@@ -542,12 +538,12 @@ const {
     });
 
     return bins.map((b) => ({ name: b.name, transactions: b.count }));
-  }, [currentTransactions, selectedCurrency]);
+  }, [currentTransactions, debouncedCurrency]);
 
   // Branch Performance for the current period
   const branchPerformanceData = useMemo(() => {
-    const branchTotals = {};
-    currentTransactions.forEach((t) => {
+    const branchTotals: any = {};
+    currentTransactions.forEach((t: any) => {
       const branchCode = t.branchCode;
       const amount = t.amount;
       if (branchCode) {
@@ -556,38 +552,24 @@ const {
     });
 
     return branches
-      .map((branch) => ({
+      .map((branch: any) => ({
         name: branch.name || `Unknown Branch (${branch.code})`,
         total: branchTotals[branch.code] || 0,
       }))
-      .sort((a, b) => b.total - a.total);
+      .sort((a: any, b: any) => b.total - a.total);
   }, [currentTransactions, branches]);
 
-  // Helper functions for styling and formatting
-  const getPerformanceColor = (change) => {
-    if (change > 10) return "text-green-600 bg-green-50";
-    if (change > 0) return "text-green-500 bg-green-50";
-    if (change < -10) return "text-red-600 bg-red-50";
-    if (change < 0) return "text-red-500 bg-red-50";
-    return "text-gray-600 bg-gray-50";
-  };
 
-  const getPerformanceIcon = (change) => {
-    if (change > 0) return <ArrowUpRight className="w-4 h-4" />;
-    if (change < 0) return <ArrowDownRight className="w-4 h-4" />;
-    return <Activity className="w-4 h-4" />;
-  };
-
-  const formatCurrency = (amount) => {
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: selectedCurrency,
+      currency: debouncedCurrency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount);
-  };
+  }, [debouncedCurrency]);
 
-  const formatNumber = (num) => {
+  const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
     if (num >= 1000) return (num / 1000).toFixed(1) + "K";
     return num.toString();
@@ -718,7 +700,7 @@ const {
                 onChange={(e) => setSelectedCurrency(e.target.value)}
                 className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {availableCurrencies.map((currency) => (
+                {availableCurrencies.map((currency: string) => (
                   <option key={currency} value={currency}>
                     {currency}
                   </option>
@@ -907,59 +889,61 @@ const {
               </div>
             </div>
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={hourlyData}>
-                  <defs>
-                    <linearGradient
-                      id="revenueGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                      <stop
-                        offset="95%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.05}
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="hourLabel"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: "#64748b" }}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: "#64748b" }}
-                    tickFormatter={(value) => formatNumber(value)}
-                  />
-                  <Tooltip
-                    formatter={(value, name) => [
+              <Suspense fallback={<div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={hourlyData}>
+                    <defs>
+                      <linearGradient
+                        id="revenueGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                        <stop
+                          offset="95%"
+                          stopColor="#3B82F6"
+                          stopOpacity={0.05}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="hourLabel"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: "#64748b" }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: "#64748b" }}
+                      tickFormatter={(value) => formatNumber(value)}
+                    />
+                    <Tooltip
+                    formatter={(value: any, name: any) => [
                       formatCurrency(value),
                       "Revenue",
                     ]}
-                    labelStyle={{ color: "#1f2937" }}
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "none",
-                      borderRadius: "12px",
-                      boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#3B82F6"
-                    strokeWidth={3}
-                    fill="url(#revenueGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+                      labelStyle={{ color: "#1f2937" }}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "none",
+                        borderRadius: "12px",
+                        boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#3B82F6"
+                      strokeWidth={3}
+                      fill="url(#revenueGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Suspense>
             </div>
           </div>
 
@@ -984,26 +968,28 @@ const {
             </div>
 
             <div className="h-48 mx-auto">
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsPie>
-                  <Pie
-                    data={paymentMethodsChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={75}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {paymentMethodsChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value) => [formatCurrency(value), "Amount"]}
-                  />
-                </RechartsPie>
-              </ResponsiveContainer>
+              <Suspense fallback={<div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={paymentMethodsChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={75}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {paymentMethodsChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: any) => [formatCurrency(value), "Amount"]}
+                    />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </Suspense>
             </div>
 
             <div className="space-y-3 mt-4">
@@ -1087,10 +1073,10 @@ const {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-gray-900">
-                        {formatCurrency(payer.total)}
+                        {formatCurrency(payer.total as number)}
                       </p>
                       <p className="text-xs text-gray-500">
-                        Avg: {formatCurrency(payer.total / payer.count)}
+                        Avg: {formatCurrency((payer.total as number) / payer.count)}
                       </p>
                     </div>
                   </div>
@@ -1122,7 +1108,7 @@ const {
               {currentTransactions
                 .slice(-5)
                 .reverse()
-                .map((transaction) => (
+                .map((transaction: any) => (
                   <div
                     key={transaction.id}
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
@@ -1181,7 +1167,7 @@ const {
                   Active Currencies
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {availableCurrencies.map((currency) => (
+                  {availableCurrencies.map((currency: string) => (
                     <span
                       key={currency}
                       className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -1202,7 +1188,7 @@ const {
                 </h4>
                 <div className="space-y-2">
                   {paymentMethods.length > 0 ? (
-                    paymentMethods.slice(0, 5).map((method) => (
+                    paymentMethods.slice(0, 5).map((method: any) => (
                       <div
                         key={method.id || method.name}
                         className="flex items-center justify-between"
@@ -1286,31 +1272,33 @@ const {
             )
           </h3>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={transactionValueDistributionData}
-                margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis
-                  dataKey="name"
-                  tickLine={false}
-                  axisLine={false}
-                  style={{ fontSize: "12px" }}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  style={{ fontSize: "12px" }}
-                />
-                <Tooltip formatter={(value) => [value, "Transactions"]} />
-                <Bar
-                  dataKey="transactions"
-                  fill="#8884d8"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={transactionValueDistributionData}
+                  margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    style={{ fontSize: "12px" }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    style={{ fontSize: "12px" }}
+                  />
+                  <Tooltip formatter={(value) => [value, "Transactions"]} />
+                  <Bar
+                    dataKey="transactions"
+                    fill="#8884d8"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </Suspense>
           </div>
         </div>
 
@@ -1371,7 +1359,7 @@ const {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {branchPerformanceData.length > 0 ? (
-              branchPerformanceData.map((branch) => (
+              branchPerformanceData.map((branch: any) => (
                 <div
                   key={branch.name}
                   className="p-4 border border-gray-200 rounded-xl bg-gray-50 hover:shadow-md transition duration-200"
@@ -1400,4 +1388,66 @@ const {
   );
 };
 
-export default Dashboard;
+// Memoized sub-components for better performance (available for future use)
+// const KPICard = memo(({ title, value, change, icon: Icon, iconColor, period }: {
+//   title: string;
+//   value: string;
+//   change: number;
+//   icon: any;
+//   iconColor: string;
+//   period: string;
+// }) => (
+//   <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
+//     <div className="flex items-center justify-between mb-4">
+//       <div className={`p-3 bg-gradient-to-r ${iconColor} rounded-xl`}>
+//         <Icon className="w-6 h-6 text-white" />
+//       </div>
+//       <div className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${getPerformanceColor(change)}`}>
+//         {getPerformanceIcon(change)}
+//         <span>{change.toFixed(1)}%</span>
+//       </div>
+//     </div>
+//     <div className="space-y-1">
+//       <p className="text-sm font-medium text-gray-600">
+//         {title} ({period})
+//       </p>
+//       <p className="text-3xl font-bold text-gray-900">
+//         {value}
+//       </p>
+//     </div>
+//   </div>
+// ));
+
+// const TransactionItem = memo(({ transaction, formatCurrency }: {
+//   transaction: any;
+//   formatCurrency: (amount: number) => string;
+// }) => (
+//   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+//     <div className="flex items-center space-x-3">
+//       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+//         <Receipt className="w-4 h-4 text-blue-600" />
+//       </div>
+//       <div>
+//         <p className="font-medium text-gray-900 text-sm">
+//           {transaction.payerName || "Unknown Payer"}
+//         </p>
+//         <p className="text-xs text-gray-500">
+//           {transaction.transactionDate.toLocaleTimeString([], {
+//             hour: "2-digit",
+//             minute: "2-digit",
+//           })}
+//         </p>
+//       </div>
+//     </div>
+//     <div className="text-right">
+//       <p className="font-bold text-gray-900">
+//         {formatCurrency(transaction.amount)}
+//       </p>
+//       <p className="text-xs text-gray-500">
+//         {transaction.paymentMethod || "Unknown Method"}
+//       </p>
+//     </div>
+//   </div>
+// ));
+
+export default memo(Dashboard);
