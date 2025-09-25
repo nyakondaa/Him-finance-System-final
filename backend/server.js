@@ -22,6 +22,10 @@ const { exec } = require("child_process");
 const os = require('os');
 const path = require('path');
 
+// Import new route modules
+const studentRoutes = require('./routes/students');
+const feeRoutes = require('./routes/fees');
+
 
 const PDFDocument = require('pdfkit');
 
@@ -39,6 +43,7 @@ let certificate = '';
 let privateKey = '';
 
 // Configure Pino Logger
+
 const logger = pino({
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     transport: process.env.NODE_ENV !== 'production' ? {
@@ -71,6 +76,8 @@ const USE_PDF_PRINT = (process.env.USE_PDF_PRINT || 'false').toLowerCase() === '
 const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || "";
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || "";
 const DEFAULT_ADMIN_BRANCH = process.env.DEFAULT_ADMIN_BRANCH || '00';
+
+const frontend_url = process.env.CORS_ORIGIN || "http://localhost:5173";
 
 
 if (!JWT_SECRET || !REFRESH_SECRET) {
@@ -175,7 +182,7 @@ logger.info('Payment reminder cron job scheduled to run daily at midnight.');
 // --- Security Middleware ---
 app.use(helmet());
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: frontend_url,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
     optionsSuccessStatus: 200,
@@ -680,11 +687,14 @@ async function generateReceiptNumber(type, branchCode, tx) {
     let nextSequence = 1;
     if (lastRecord) {
         const receiptNum = type === 'expenditure' ? lastRecord.voucherNumber : lastRecord.receiptNumber;
-        if (receiptNum && receiptNum.includes(`-${prefix}-`)) {
-            const parts = receiptNum.split(`-${prefix}-`);
-            if (parts.length === 2) {
-                const lastSequence = parseInt(parts[1], 10);
-                nextSequence = lastSequence + 1;
+        if (receiptNum) {
+            // Extract the trailing 6-digit numeric sequence (after year)
+            const match = receiptNum.match(/(\d{6})$/);
+            if (match) {
+                const lastSequence = parseInt(match[1], 10);
+                if (Number.isFinite(lastSequence)) {
+                    nextSequence = lastSequence + 1;
+                }
             }
         }
     }
@@ -2090,6 +2100,66 @@ app.post('/api/members/:memberId/projects', authenticateToken, checkPermission('
 
 
 // --- TRANSACTION ROUTES ---
+
+// Generate Receipt and Save Transaction
+app.post('/api/generate-receipt', authenticateToken, checkPermission('transactions', 'create'), asyncHandler(async (req, res) => {
+    const { error, value } = transactionCreateSchema.validate(req.body);
+    if (error) throw new ValidationError(error.details[0].message);
+
+    const { memberId, revenueHeadCode, amount, currencyCode, paymentMethodId, referenceNumber, notes, transactionDate } = value;
+
+    // Verify member, revenue head, currency, and payment method exist
+    const [member, revenueHead, currency, paymentMethod] = await Promise.all([
+        prisma.member.findUnique({
+            where: { id: memberId },
+            select: { id: true, memberNumber: true, firstName: true, lastName: true, branchCode: true }
+        }),
+        prisma.revenueHead.findUnique({ where: { code: revenueHeadCode } }),
+        prisma.currency.findUnique({ where: { code: currencyCode } }),
+        prisma.paymentMethod.findUnique({ where: { id: paymentMethodId } })
+    ]);
+
+    if (!member) throw new NotFoundError('Member not found.');
+    if (!revenueHead) throw new NotFoundError('Revenue head not found.');
+    if (!currency) throw new NotFoundError('Currency not found.');
+    if (!paymentMethod) throw new NotFoundError('Payment method not found.');
+
+    const transaction = await prisma.$transaction(async (tx) => {
+        const receiptNumber = await generateReceiptNumber('transaction', member.branchCode, tx);
+
+        return tx.transaction.create({
+            data: {
+                receiptNumber,
+                memberId,
+                revenueHeadCode,
+                amount: new Prisma.Decimal(amount),
+                currencyCode,
+                paymentMethodId,
+                referenceNumber,
+                branchCode: member.branchCode,
+                transactionDate: new Date(transactionDate),
+                userId: req.user.id,
+                notes,
+                status: 'completed'
+            },
+            include: {
+                member: { select: { memberNumber: true, firstName: true, lastName: true } },
+                revenueHead: { select: { name: true } },
+                user: { select: { username: true } },
+                currency: { select: { code: true, symbol: true } },
+                paymentMethod: { select: { name: true } }
+            }
+        });
+    });
+
+    await logAudit(req.user.id, req.user.username, 'CREATE', 'transactions', transaction.receiptNumber, null, transaction, req);
+
+    res.status(201).json({
+        message: 'Receipt generated and transaction recorded successfully.',
+        transaction,
+        receiptNumber: transaction.receiptNumber
+    });
+}));
 
 // Record Member Contribution
 app.post('/api/contributions', authenticateToken, checkPermission('transactions', 'create'), asyncHandler(async (req, res) => {
@@ -4002,134 +4072,6 @@ function getAvailablePrinters() {
 }
 
 
-/*
-
-function printToPrinter(printerName, text, copies = 1) {
-  return new Promise((resolve, reject) => {
-    if (!printerName || !text) {
-      return reject(new Error("Printer name and text are required."));
-    }
-
-    const platform = process.platform;
-
-    if (platform === "linux" || platform === "darwin") {
-      // Linux/macOS: write to temp file and send to printer using lp
-      const safeText = (typeof text === "string" ? text : String(text));
-      const contentToPrint = safeText.length === 0 ? "\n" : (safeText.endsWith("\n") ? safeText : `${safeText}\n`);
-
-      if (USE_PDF_PRINT) {
-        // Render text as a simple PDF for printers expecting PDF/PCL (e.g., Xerox VersaLink)
-        const tempPdf = path.join(os.tmpdir(), `receipt_${Date.now()}.pdf`);
-
-        const renderPdf = () => new Promise((res, rej) => {
-          try {
-            const doc = new PDFDocument({ size: 'A4', margin: 36 });
-            const stream = fs.createWriteStream(tempPdf);
-            doc.pipe(stream);
-            doc.font('Courier');
-            doc.fontSize(10);
-
-            const lines = contentToPrint.split(/\r?\n/);
-            lines.forEach((line) => {
-              doc.text(line.length > 0 ? line : ' ');
-            });
-
-            doc.end();
-            stream.on('finish', res);
-            stream.on('error', rej);
-          } catch (e) {
-            rej(e);
-          }
-        });
-
-        renderPdf().then(() => {
-          const copiesOpt = Math.max(1, parseInt(copies, 10) || 1);
-          const command = `lp -d "${printerName}" -n ${copiesOpt} "${tempPdf}"`;
-          exec(command, (error, stdout, stderr) => {
-            fs.unlink(tempPdf, (unlinkErr) => {
-              if (unlinkErr) console.error("Failed to delete temp file:", unlinkErr);
-            });
-            if (error) return reject(new Error(stderr || error.message));
-            resolve("Print job sent successfully.");
-          });
-        }).catch((e) => reject(new Error(`Failed to render PDF: ${e.message}`)));
-      } else {
-        const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`);
-        fs.writeFile(tempFile, contentToPrint, { encoding: "utf8" }, (err) => {
-          if (err) return reject(new Error(`Failed to create temp file: ${err.message}`));
-          // Use raw mode to avoid unwanted filtering converting text to blank pages
-          const copiesOpt = Math.max(1, parseInt(copies, 10) || 1);
-          const command = `lp -o raw -d "${printerName}" -n ${copiesOpt} "${tempFile}"`;
-          exec(command, (error, stdout, stderr) => {
-            fs.unlink(tempFile, (unlinkErr) => {
-              if (unlinkErr) console.error("Failed to delete temp file:", unlinkErr);
-            });
-            if (error) return reject(new Error(stderr || error.message));
-            resolve("Print job sent successfully.");
-          });
-        });
-      }
-    } else if (platform === "win32") {
-      // Windows: write text to temp file and print using notepad
-      const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`);
-      fs.writeFile(tempFile, text, { encoding: "utf8" }, (err) => {
-        if (err) return reject(new Error(`Failed to create temp file: ${err.message}`));
-
-        const totalCopies = Math.max(1, parseInt(copies, 10) || 1);
-        let printed = 0;
-
-        const printOnce = () => {
-          const command = `start /wait notepad /p "${tempFile}"`;
-          exec(command, (error, stdout, stderr) => {
-            if (error) return reject(new Error(stderr || error.message));
-            printed += 1;
-            if (printed < totalCopies) {
-              printOnce();
-            } else {
-              fs.unlink(tempFile, (unlinkErr) => {
-                if (unlinkErr) console.error("Failed to delete temp file:", unlinkErr);
-              });
-              resolve("Print job sent successfully.");
-            }
-          });
-        };
-
-        printOnce();
-      });
-    } else {
-      reject(new Error("Unsupported OS for printing."));
-    }
-  });
-}
-
-
-app.post("/api/print", async (req, res) => {
-  const { printer, text, copies } = req.body;
-
-  if (!printer) {
-    return res.status(400).json({ error: "Printer is required" });
-  }
-
-  const safeText = typeof text === 'string' ? text : (text == null ? '' : String(text));
-  if (safeText.trim().length === 0) {
-    return res.status(400).json({ error: "Text is empty" });
-  }
-
-  const copiesOpt = Math.max(1, parseInt(copies, 10) || 1);
-
-  try {
-    console.log("Printing to:", printer);
-    console.log("Text length:", safeText.length);
-    console.log("Copies:", copiesOpt);
-    const result = await printToPrinter(printer, safeText, copiesOpt);
-    res.status(200).json({ message: result });
-  } catch (err) {
-    console.error("Print error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-*/
 
 
 // List available printers (sanitized)
@@ -4186,6 +4128,14 @@ app.get("/api/receipt/:id", (req, res) => {
 
 
 
+
+// --- NEW SCHOOL ROUTES ---
+
+// Student management routes (school-specific)
+app.use('/api/students', studentRoutes);
+
+// Fee management routes (school-specific)
+app.use('/api/fees', feeRoutes);
 
 // Catch all unhandled routes
 app.all('{*any}', (req, res, next) => {
