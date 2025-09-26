@@ -3258,7 +3258,8 @@ app.post(
           currency: { select: { code: true, symbol: true } },
           paymentMethod: { select: { name: true } },
           requester: { select: { username: true } },
-          reimbursee: { select: { name: true } }, // correct relation name
+
+      
         },
       });
     });
@@ -3328,7 +3329,7 @@ app.get(
         include: {
           expenditureHead: { select: { name: true } },
           project: { select: { name: true } },
-          supplier: { select: { name: true } },
+          
           currency: { select: { code: true, symbol: true } },
           paymentMethod: { select: { name: true } },
           requester: { select: { username: true } },

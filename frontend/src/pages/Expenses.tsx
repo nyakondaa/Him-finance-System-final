@@ -38,26 +38,25 @@ const ExpenditurePage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catRes, payRes, expRes, Branches, membersRes] = await Promise.all([
+        const [catRes, payRes, expRes, branchesRes, membersRes] = await Promise.all([
           getExpenditureHeads(),
-          getPaymentMethods(),
-        
+          getPaymentMethods(),     
+          getExpenditures(),   
           getBranches(),
-          getMembers(),
+          getMembers(), // Add this line to fetch members
         ]);
 
-        
         setCategories(Array.isArray(catRes?.data || catRes) ? catRes?.data || catRes : []);
         setPaymentMethods(Array.isArray(payRes?.data || payRes) ? payRes?.data || payRes : []);
         setExpenditures(Array.isArray(expRes?.data || expRes) ? expRes?.data || expRes : []);
-        setBranches(Array.isArray(Branches?.data || Branches) ? Branches?.data || Branches : []);
-        setMembers(Array.isArray(membersRes.members) ? membersRes.members : []);
-
-        console.log("Fetched members:", membersRes);
-        console.log("Fetched branches:", Branches);
+        setBranches(Array.isArray(branchesRes?.data || branchesRes) ? branchesRes?.data || branchesRes : []);
+        setMembers(Array.isArray(membersRes?.data || membersRes) ? membersRes?.data || membersRes : []);
+        
+        console.log("Fetched branches:", branchesRes);
         console.log("Fetched categories:", catRes);
         console.log("Fetched payment methods:", payRes);
         console.log("Fetched expenditures:", expRes);
+        console.log("Fetched members:", membersRes); // Add this log
       } catch (err) {
         console.error("Error fetching data", err);
       } finally {
@@ -76,7 +75,7 @@ const ExpenditurePage = () => {
     setEditingId(null);
   };
 
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
@@ -88,18 +87,10 @@ const handleSubmit = async (e: React.FormEvent) => {
       // Calculate total amount locally (optional for display/local checks, but not sent)
       const amount = parseFloat(formData.amount as any);
       const taxAmount = parseFloat((formData.taxAmount || 0) as any);
-      const calculatedTotal = amount + taxAmount; 
       
       // 👇 CRITICAL FIX: Destructure to omit totalAmount from the payload
-      // We also ensure other fields that might be calculated or forbidden 
-      // are omitted, though 'totalAmount' is the primary culprit.
       const { totalAmount: omittedTotalAmount, ...dataToSend } = formData;
       
-      // Ensure numerical fields are cast correctly if they are strings from the form
-      // dataToSend.amount = amount;
-      // dataToSend.taxAmount = taxAmount;
-
-
       if (isEditing && editingId) await updateExpenditure(editingId, dataToSend);
       else await createExpenditure(dataToSend);
 
@@ -234,7 +225,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
             </div>
 
-             {/* Tax Amount */}
+            {/* Tax Amount */}
             <div>
               <label className="block text-sm font-medium mb-1">Tax Amount</label>
               <input
@@ -247,7 +238,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
             </div>
 
-             {/* Currency Code */}
+            {/* Currency Code */}
             <div>
               <label className="block text-sm font-medium mb-1">Currency Code *</label>
               <input
@@ -306,7 +297,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                 ))}
               </select>
             </div>
-        
 
             {/* Is Reimbursement Checkbox */}
             <div className="flex items-center space-x-2">

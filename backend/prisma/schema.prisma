@@ -580,7 +580,7 @@ model Expenditure {
   expenditureHeadCode String                @map("expenditure_head_code")
   projectId           Int?                  @map("project_id")
   milestoneId         Int?                  @map("milestone_id")
-  supplierId          Int?                  @map("supplier_id")
+
   description         String
   amount              Decimal               @db.Decimal(120, 2)
   taxAmount           Decimal?              @default(0) @map("tax_amount") @db.Decimal(120, 2)
