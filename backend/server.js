@@ -2294,7 +2294,7 @@ app.post('/api/transactions', authenticateToken, checkPermission('transactions',
 //--Gettiing Transactions
 app.get('/api/transactions', authenticateToken, checkPermission('transactions', 'read'), asyncHandler(async (req, res) => {
     // 1. Destructure and validate query parameters
-    const { limit = 50, offset = 0, branchCode, approvalStatus, startDate, endDate } = req.query;
+    const { limit = 50, offset = 0, branchCode, approvalStatus, startDate, endDate ,revenueHeadCode } = req.query;
 
     const take = parseInt(limit, 10);
     const skip = parseInt(offset, 10);
@@ -2313,6 +2313,12 @@ app.get('/api/transactions', authenticateToken, checkPermission('transactions', 
     // 3. Add other filters if they exist
     // This is a transaction endpoint, approvalStatus is likely an expenditure field, remove it if not needed.
     // If your Transaction model has an approvalStatus field, keep this.
+
+    if (revenueHeadCode) {
+        whereClause.revenueHeadCode = revenueHeadCode;
+    }
+
+
     if (approvalStatus) {
         whereClause.approvalStatus = approvalStatus;
     }
@@ -2340,7 +2346,8 @@ app.get('/api/transactions', authenticateToken, checkPermission('transactions', 
                 orderBy: { transactionDate: 'desc' },
               
                 include: {
-                    revenueHead: { select: { name: true } },
+
+                    revenueHead: { select: {code:true, name: true } },
                     member: { select: { firstName: true, lastName: true } },
                     currency: { select: { name: true, symbol: true } },
                     paymentMethod: { select: { name: true } },
