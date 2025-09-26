@@ -17,7 +17,7 @@ import useModal from './hooks/useModal';
 import TransactionsPage from "./pages/TransactionsPage.tsx";
 import CurrencyManagementPage from "./pages/CurrencyManagementPage.tsx";
 import ProjectBoardPage from "./pages/ProjectBoardPage.tsx";
-import ExchangeRatePage from "./pages/ExchangeRatePage.tsx";
+import ExpensesPage from "./pages/Expenses.tsx";
 import MembersPage from "./pages/MenbersPage.tsx";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css'
@@ -36,6 +36,7 @@ export default function App() {
                         <Route index element={<DashboardPage showModal={showModal} />} />
                         <Route path="users" element={<UserManagementPage showModal={showModal} />} />
                         <Route path="members" element={<MembersPage  />} />
+                        <Route path="expenses" element={<ExpensesPage />} />
                         <Route path="revenue-heads" element={<RevenueHeadsPage showModal={showModal} />} />
                         <Route path="expenditure-heads" element={<ExpenditureHeadsPage showModal={showModal} />} />
                         <Route path="transactions" element={<TransactionsPage  />} />

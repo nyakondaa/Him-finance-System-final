@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getTransactions,
   refundTransaction,
   checkPermission,
   getTransactionById,
+  getRevenueHeads,
+
 } from "../services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import useAuth from "@/hooks/useAuth";
+import type { Transaction, Account, Member } from "../utils/Types";
 
 const formatDate = (dateString: string | number | Date) => {
   return new Date(dateString).toLocaleDateString("en-US", {
@@ -66,6 +69,8 @@ const TransactionsPage = () => {
   >(null);
   const [refundReason, setRefundReason] = useState("");
   const [showRefundDialog, setShowRefundDialog] = useState(false);
+
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const {
     data: transactions,
@@ -125,9 +130,60 @@ const TransactionsPage = () => {
     }
   };
 
+  const getAccounts = async () => {
+
+    const revenueHead = await getRevenueHeads();
+    //const expenditureHead = await getExpenditureHeads();
+
+    const revenueAccount: Account[] = await Promise.all(
+      revenueHead.map(async (head: any) => {
+        const transactions = await getTransactions({
+          revenueHeadCode: head.code,
+        });
+
+        return {
+          accountNumber: head.code,
+          accountType: head.name,
+          balance: "0.00", // you can compute from transactions if needed
+          transactions: transactions.transactions, // assuming API response has { transactions: [...] }
+        };
+      })
+    );
+
+    /*
+    const expenditureAccount: Account[] = await Promise.all(
+      expenditureHead.map(async (head: any) => {
+        const transactions = await getTransactions({
+          revenueHeadCode: head.code,
+        });
+
+        return {
+          accountNumber: head.code,
+          accountType: head.name,
+          balance: "0.00", // you can compute from transactions if needed
+          transactions: transactions.transactions, // assuming API response has { transactions: [...] }
+        };
+      })
+    );
+
+    */
+
+    console.log("Revenue Accounts:", revenueAccount);
+
+
+
+    //setAccounts(allAccounts);
+  };
+/*
+  useEffect(() => {
+    getAccounts();
+  }, []);
+
+
+  */
+
   return (
     <div className="p-4 space-y-4">
-      {/* Minimal Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Transactions</h1>
         <div className="flex space-x-2">
@@ -148,7 +204,6 @@ const TransactionsPage = () => {
         </div>
       </div>
 
-      {/* Transactions Table */}
       {isError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -238,7 +293,6 @@ const TransactionsPage = () => {
         </Table>
       </div>
 
-      {/* Transaction Details Dialog */}
       <Dialog
         open={!!selectedTransactionId}
         onOpenChange={(open) => !open && setSelectedTransactionId(null)}
@@ -299,7 +353,6 @@ const TransactionsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Refund Dialog */}
       <Dialog open={showRefundDialog} onOpenChange={setShowRefundDialog}>
         <DialogContent>
           <DialogHeader>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Settings, Plus, Save, Edit, Trash2 } from "lucide-react";
 import {
@@ -9,13 +9,13 @@ import {
 } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import useAuth from "../hooks/useAuth";
-
+import RevenueHeadsPage from "./RevenueHeadsPage";
+import ExpenditureHeadsPage from "./ExpenditureHeadsPage";
 
 interface Branch {
   code: string;
   name: string;
 }
-
 
 interface User {
   uid: string;
@@ -45,9 +45,9 @@ interface SystemSettingsPageProps {
   ) => void;
 }
 
-const SystemSettingsPage = ({
-  showModal,
-}: SystemSettingsPageProps): any => {
+
+
+const SystemSettingsPage = ({ showModal }: SystemSettingsPageProps): any => {
   const queryClient = useQueryClient();
   // We're using a type assertion here to tell TypeScript the shape of the return value
   const { currentUser } = useAuth() as { currentUser: User | null };
@@ -90,7 +90,7 @@ const SystemSettingsPage = ({
 
   // Mutation for updating a branch with correct type parameters.
   const updateBranchMutation = useMutation<void, Error, UpdateBranchVariables>({
-     mutationFn: ({ code, data }) => updateBranch(code, data),
+    mutationFn: ({ code, data }) => updateBranch(code, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["branches"] });
       showModal("Branch updated successfully!");
@@ -139,7 +139,7 @@ const SystemSettingsPage = ({
       `Are you sure you want to delete branch "${name}" (${code})? This action cannot be undone.`,
       "Confirm Deletion",
       true,
-      () => deleteBranchMutation.mutate(code),
+      () => deleteBranchMutation.mutate(code)
     );
   };
 
@@ -300,6 +300,8 @@ const SystemSettingsPage = ({
           </table>
         </div>
       </div>
+      <RevenueHeadsPage showModal={showModal}></RevenueHeadsPage>
+      <ExpenditureHeadsPage showModal={showModal}></ExpenditureHeadsPage>
     </div>
   );
 };

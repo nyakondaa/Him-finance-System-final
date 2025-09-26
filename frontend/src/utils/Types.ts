@@ -50,3 +50,10 @@ export  interface Member {
       generalTransactions: number;
     };
   }
+
+  export interface Account {    
+    accountNumber: string;
+    accountType: string;
+    balance: string; // Prisma Decimal serialized as string in JSON    
+    transactions: Transaction[];
+  }

@@ -76,8 +76,10 @@ const Navbar = () => {
 
     const adminItems = [
         { to: "/users", icon: <Users className="w-5 h-5" />, text: "User Management" },
-        { to: "/revenue-heads", icon: <DollarSign className="w-5 h-5" />, text: "Revenue Heads" },
-        { to: "/expenditure-heads", icon: <Banknote className="w-5 h-5" />, text: "Expenditure Heads" },
+        
+          { to: "/Expenses", icon: <DollarSign className="w-5 h-5" />, text: "Expenses " },
+
+      
         { to: "/members", icon: <User className="w-5 h-5" />, text: "Members" },
         { to: "/payment-management", icon: <CreditCard className="w-5 h-5" />, text: "Payment Management" },
         
@@ -85,6 +87,11 @@ const Navbar = () => {
         { to: "/settings", icon: <Settings className="w-5 h-5" />, text: "System Settings" },
         
     ];
+     {/* { to: "/expenditure-heads", icon: <Banknote className="w-5 h-5" />, text: "Expenditure Heads" },
+        
+        { to: "/revenue-heads", icon: <DollarSign className="w-5 h-5" />, text: "Revenue Heads" },
+         
+        */} 
 
     const isAdminOrSupervisor = currentUser.role === 'admin' || currentUser.role === 'supervisor';
 
