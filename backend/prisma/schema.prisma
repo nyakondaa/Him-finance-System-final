@@ -622,7 +622,7 @@ model Expenditure {
   project             Project?              @relation(fields: [projectId], references: [id])
   reimbursee          Member?               @relation(fields: [reimbursedTo], references: [id])
   requester           User                  @relation("ExpenditureRequests", fields: [requestedBy], references: [id])
-  supplier            Supplier?             @relation(fields: [supplierId], references: [id])
+  
   receipts            ExpenseReceipt[]
 
   @@map("expenditures")
@@ -693,7 +693,7 @@ model Supplier {
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
   contracts         Contract[]
-  expenditures      Expenditure[]
+  
   MaintenanceRecord MaintenanceRecord[]
   evaluations       SupplierEvaluation[]
   statusHistory     SupplierStatusHistory[]

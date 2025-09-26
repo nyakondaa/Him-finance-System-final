@@ -71,4 +71,5 @@ export  interface Member {
   expenseDate: string;
   isRecurring: boolean;
   approvalStatus: string;
+  taxAmount?: number;
 }
