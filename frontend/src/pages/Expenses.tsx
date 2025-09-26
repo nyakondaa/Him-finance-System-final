@@ -1,386 +1,321 @@
-import React, { useState, useEffect } from "react";
-import { Plus, Save, Calendar, DollarSign, User, Building, Edit, Trash2, Search, Download } from "lucide-react";
-import { getExpenditureHeads, getPaymentMethods } from "@/services/api";
-
-// Mock data and functions
-const getExpenditures = async () =>
-  new Promise((resolve) =>
-    setTimeout(() => {
-      resolve([
-        {
-          id: 1,
-          voucherNumber: "VOUCHER-001",
-          expenditureHeadCode: "SUPPLIES",
-          description: "Monthly office supplies",
-          amount: 150,
-          currencyCode: "USD",
-          paymentMethodId: 1,
-          expenseDate: new Date().toISOString().substring(0, 10),
-          reimbursementTo: "Pastor John Doe",
-          disbursedBy: "Jane Smith",
-          supplier: "Office Supply Depot",
-          approvalStatus: "APPROVED",
-          isRecurring: false,
-        },
-        {
-          id: 2,
-          voucherNumber: "VOUCHER-002",
-          expenditureHeadCode: "RENT",
-          description: "Rent for head office",
-          amount: 1200,
-          currencyCode: "USD",
-          paymentMethodId: 2,
-          expenseDate: new Date().toISOString().substring(0, 10),
-          reimbursementTo: null,
-          disbursedBy: "Jane Smith",
-          supplier: "Landlord Inc.",
-          approvalStatus: "PENDING",
-          isRecurring: true,
-        },
-      ]);
-    }, 500)
-  );
-
-const addExpenditure = async (data) => console.log("Adding:", data);
-const updateExpenditure = async (id, data) => console.log("Updating:", id, data);
-const deleteExpenditure = async (id) => console.log("Deleting:", id);
-
-const StatusBadge = ({ status }) => {
-  const config = {
-    APPROVED: "bg-green-100 text-green-800",
-    PENDING: "bg-yellow-100 text-yellow-800",
-    REJECTED: "bg-red-100 text-red-800",
-  };
-  return <span className={`px-3 py-1 rounded-full text-xs font-medium ${config[status] || "bg-gray-100 text-gray-700"}`}>{status}</span>;
-};
+// ExpenditurePage.tsx
+import React, { useEffect, useState } from "react";
+import { Plus, Save, Edit, Trash2, Search } from "lucide-react";
+import { format } from "date-fns";
+import {
+  getExpenditureHeads,
+  getExpenditures,
+  getPaymentMethods,
+  updateExpenditure,
+  createExpenditure,
+  deleteExpenditure,
+} from "@/services/api";
+import type { Expenditure } from "@/utils/Types";
 
 const ExpenditurePage = () => {
-  const [expenditures, setExpenditures] = useState([]);
-  const [formData, setFormData] = useState({
-    id: null,
-    voucherNumber: "",
-    expenditureHeadCode: "",
-    description: "",
-    amount: "",
-    paymentMethodId: "",
-    expenseDate: new Date().toISOString().substring(0, 10),
-    reimbursementTo: "",
-    disbursedBy: "",
-    supplier: "",
-  });
-  const [categoryOptions, setCategoryOptions] = useState([]);
-  const [paymentOptions, setPaymentOptions] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
+
+  const [formData, setFormData] = useState<Partial<Expenditure>>({});
   const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [isFormVisible, setIsFormVisible] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [isFormExpanded, setIsFormExpanded] = useState(true);
 
+  // Fetch all data on mount
   useEffect(() => {
-    const fetchAll = async () => {
+    const fetchData = async () => {
       try {
-        const [cats, pays, exps] = await Promise.all([getExpenditureHeads(), getPaymentMethods(), getExpenditures()]);
-        setCategoryOptions(cats);
-        setPaymentOptions(pays);
-        setExpenditures(exps);
+        const [catRes, payRes, expRes] = await Promise.all([
+          getExpenditureHeads(),
+          getPaymentMethods(),
+          getExpenditures(),
+        ]);
+        setCategories(Array.isArray(catRes?.data || catRes) ? (catRes?.data || catRes) : []);
+        setPaymentMethods(Array.isArray(payRes?.data || payRes) ? (payRes?.data || payRes) : []);
+        setExpenditures(Array.isArray(expRes?.data || expRes) ? (expRes?.data || expRes) : []);
       } catch (err) {
-        console.error(err);
+        console.error("Error fetching data", err);
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
-    fetchAll();
+    fetchData();
   }, []);
 
-  const handleChange = (field, value) => setFormData({ ...formData, [field]: value });
+  const handleChange = (field: string, value: any) =>
+    setFormData({ ...formData, [field]: value });
 
-  const handleSubmit = async (e) => {
+  const resetForm = () => {
+    setFormData({});
+    setIsEditing(false);
+    setEditingId(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      if (isEditing && formData.id) {
-        await updateExpenditure(formData.id, formData);
-        setExpenditures((prev) => prev.map((exp) => (exp.id === formData.id ? formData : exp)));
-        alert("Expenditure updated!");
-      } else {
-        const newId = Math.max(...expenditures.map((e) => e.id)) + 1;
-        const newExp = { ...formData, id: newId };
-        await addExpenditure(newExp);
-        setExpenditures((prev) => [...prev, newExp]);
-        alert("Expenditure added!");
-      }
-      setFormData({
-        id: null,
-        voucherNumber: "",
-        expenditureHeadCode: "",
-        description: "",
-        amount: "",
-        paymentMethodId: "",
-        expenseDate: new Date().toISOString().substring(0, 10),
-        reimbursementTo: "",
-        disbursedBy: "",
-        supplier: "",
-      });
-      setIsEditing(false);
+      if (isEditing && editingId) await updateExpenditure(editingId, formData);
+      else await createExpenditure(formData);
+
+      const updated = await getExpenditures();
+      setExpenditures(Array.isArray(updated?.data || updated) ? (updated?.data || updated) : []);
+      resetForm();
     } catch (err) {
       console.error(err);
-      alert("Failed to submit");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEdit = (exp) => {
+  const handleEdit = (exp: Expenditure) => {
     setFormData(exp);
+    setEditingId(exp.id);
     setIsEditing(true);
-    setIsFormExpanded(true);
+    setIsFormVisible(true);
   };
 
-  const handleDelete = async (id) => {
-    if (confirm("Are you sure you want to delete this expenditure?")) {
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this expenditure?")) return;
+    try {
       await deleteExpenditure(id);
-      setExpenditures((prev) => prev.filter((e) => e.id !== id));
+      setExpenditures(prev => prev.filter(e => e.id !== id));
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  const filteredExpenditures = expenditures.filter(
-    (exp) =>
-      (exp.description.toLowerCase().includes(searchTerm.toLowerCase()) || exp.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (statusFilter === "ALL" || exp.approvalStatus === statusFilter)
-  );
+  const filteredExpenditures = Array.isArray(expenditures)
+    ? expenditures.filter(exp => {
+        const matchesSearch =
+          exp.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          exp.voucherNumber?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === "ALL" || exp.approvalStatus === statusFilter;
+        return matchesSearch && matchesStatus;
+      })
+    : [];
 
-  const totalAmount = filteredExpenditures.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+  const totalAmount = filteredExpenditures.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
-  if (isLoading) return <div className="text-center p-8">Loading...</div>;
+  const StatusBadge = ({ status }: { status: string }) => {
+    const config: Record<string, { color: string; label: string }> = {
+      APPROVED: { color: "bg-green-100 text-green-800", label: "Approved" },
+      PENDING: { color: "bg-yellow-100 text-yellow-800", label: "Pending" },
+      REJECTED: { color: "bg-red-100 text-red-800", label: "Rejected" },
+    };
+    const c = config[status] || { color: "bg-gray-100 text-gray-800", label: status };
+    return <span className={`px-3 py-1 text-xs font-semibold rounded-full ${c.color}`}>{c.label}</span>;
+  };
+
+  if (loading) return <div className="p-6 text-center text-gray-500">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Expense Management</h1>
-          <button
-            onClick={() => setIsFormExpanded(!isFormExpanded)}
-            className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={20} />
-            <span>{isFormExpanded ? "Hide Form" : "Show Form"}</span>
-          </button>
+    <div className="min-h-screen bg-gray-50 p-6 font-[Inter]">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Expense Management</h1>
+          <p className="text-gray-600 mt-1">Track and manage church financial expenditures</p>
         </div>
+        <button
+          onClick={() => setIsFormVisible(!isFormVisible)}
+          className="px-6 py-3 bg-blue-600 text-white rounded-xl flex items-center gap-2 hover:bg-blue-700 transition shadow-md"
+        >
+          <Plus size={18} />
+          {isFormVisible ? "Hide Form" : "Add New Expense"}
+        </button>
+      </div>
 
-        {/* Form */}
-        {isFormExpanded && (
-          <div className="bg-white p-8 rounded-2xl shadow-md mb-8 border border-gray-200">
-            <h2 className="text-2xl font-semibold mb-4">{isEditing ? "Edit Expense" : "Add New Expense"}</h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Description */}
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-2">Description *</label>
-                <input
-                  type="text"
-                  className="w-full px-5 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.description}
-                  onChange={(e) => handleChange("description", e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Category */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Category *</label>
-                <select
-                  className="w-full px-5 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.expenditureHeadCode}
-                  onChange={(e) => handleChange("expenditureHeadCode", e.target.value)}
-                  required
-                >
-                  <option value="">Select Category</option>
-                  {categoryOptions.map((c) => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Amount Paid *</label>
-                <div className="relative">
-                  <DollarSign className="absolute top-3 left-3 text-gray-400" size={18} />
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.amount}
-                    onChange={(e) => handleChange("amount", e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Payment Method *</label>
-                <select
-                  className="w-full px-5 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.paymentMethodId}
-                  onChange={(e) => handleChange("paymentMethodId", e.target.value)}
-                  required
-                >
-                  <option value="">Select Payment Method</option>
-                  {paymentOptions.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Expense Date */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Date of Payment *</label>
-                <div className="relative">
-                  <Calendar className="absolute top-3 left-3 text-gray-400" size={18} />
-                  <input
-                    type="date"
-                    className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.expenseDate}
-                    onChange={(e) => handleChange("expenseDate", e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Approving Person */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Person Approving</label>
-                <div className="relative">
-                  <User className="absolute top-3 left-3 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.reimbursementTo}
-                    onChange={(e) => handleChange("reimbursementTo", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Disbursed By */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Person Paying / Disbursing</label>
-                <div className="relative">
-                  <User className="absolute top-3 left-3 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.disbursedBy}
-                    onChange={(e) => handleChange("disbursedBy", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Supplier */}
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-2">Company / Vendor Paid To</label>
-                <div className="relative">
-                  <Building className="absolute top-3 left-3 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.supplier}
-                    onChange={(e) => handleChange("supplier", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="col-span-2 flex justify-end mt-4">
-                <button
-                  type="submit"
-                  className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors space-x-2 disabled:opacity-50"
-                  disabled={isSubmitting}
-                >
-                  <Save size={18} />
-                  <span>{isEditing ? "Update Expense" : "Save Expense"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Filters and Table */}
-        <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-200">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-            <div className="flex items-center gap-2 border rounded-xl px-3 py-2">
-              <Search size={18} className="text-gray-400" />
+      {/* Form */}
+      {isFormVisible && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 transition-all">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">{isEditing ? "Edit Expense" : "Record New Expense"}</h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Description */}
+            <div className="col-span-1 md:col-span-2 lg:col-span-3">
+              <label className="block text-sm font-medium mb-1">Expense Description *</label>
               <input
                 type="text"
-                placeholder="Search..."
-                className="outline-none border-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={formData.description || ""}
+                onChange={(e) => handleChange("description", e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                required
+                disabled={isSubmitting}
               />
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Category *</label>
               <select
-                className="px-3 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                value={formData.expenditureHeadCode || ""}
+                onChange={(e) => handleChange("expenditureHeadCode", e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                required
+                disabled={isSubmitting}
               >
-                <option value="ALL">All Statuses</option>
-                <option value="APPROVED">Approved</option>
-                <option value="PENDING">Pending</option>
-                <option value="REJECTED">Rejected</option>
+                <option value="">Select Category</option>
+                {categories.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
               </select>
-              <button className="flex items-center gap-1 px-3 py-2 border rounded-xl hover:bg-gray-100 transition-colors">
-                <Download size={16} />
-                Export
+            </div>
+
+            {/* Amount */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Amount *</label>
+              <input
+                type="number"
+                value={formData.amount || ""}
+                onChange={(e) => handleChange("amount", parseFloat(e.target.value))}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Payment Method */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Payment Method *</label>
+              <select
+                value={formData.paymentMethodId || ""}
+                onChange={(e) => handleChange("paymentMethodId", parseInt(e.target.value))}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                required
+                disabled={isSubmitting}
+              >
+                <option value="">Select Method</option>
+                {paymentMethods.map(pm => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+              </select>
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Date *</label>
+              <input
+                type="date"
+                value={formData.expenseDate?.substring(0, 10) || ""}
+                onChange={(e) => handleChange("expenseDate", e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Person Approving */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Person Approving</label>
+              <input
+                type="text"
+                value={formData.reimbursementTo || ""}
+                onChange={(e) => handleChange("reimbursementTo", e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Disbursed By */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Person Paying / Disbursing</label>
+              <input
+                type="text"
+                value={formData.disbursedBy || ""}
+                onChange={(e) => handleChange("disbursedBy", e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Supplier */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Supplier / Company</label>
+              <input
+                type="text"
+                value={formData.supplier || ""}
+                onChange={(e) => handleChange("supplier", e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Submit Button */}
+            <div className="col-span-1 md:col-span-2 lg:col-span-3 flex justify-end mt-4">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl flex items-center gap-2 hover:bg-blue-700 shadow-md transition"
+              >
+                <Save size={18} />
+                {isEditing ? "Update Expense" : "Save Expense"}
               </button>
             </div>
-          </div>
-
-          <table className="w-full border-collapse table-auto">
-            <thead>
-              <tr className="bg-gray-100 text-left">
-                <th className="p-3 font-medium text-gray-700">Voucher</th>
-                <th className="p-3 font-medium text-gray-700">Description</th>
-                <th className="p-3 font-medium text-gray-700">Amount</th>
-                <th className="p-3 font-medium text-gray-700">Status</th>
-                <th className="p-3 font-medium text-gray-700">Date</th>
-                <th className="p-3 font-medium text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredExpenditures.map((exp) => (
-                <tr key={exp.id} className="border-b hover:bg-gray-50 transition-colors">
-                  <td className="p-3">{exp.voucherNumber}</td>
-                  <td className="p-3">{exp.description}</td>
-                  <td className="p-3">${exp.amount.toFixed(2)}</td>
-                  <td className="p-3"><StatusBadge status={exp.approvalStatus} /></td>
-                  <td className="p-3">{exp.expenseDate}</td>
-                  <td className="p-3 flex gap-2">
-                    <button
-                      onClick={() => handleEdit(exp)}
-                      className="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-xl hover:bg-yellow-200 transition-colors"
-                    >
-                      <Edit size={16} /> Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(exp.id)}
-                      className="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-800 rounded-xl hover:bg-red-200 transition-colors"
-                    >
-                      <Trash2 size={16} /> Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredExpenditures.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center p-4 text-gray-500">No expenses found</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          <div className="text-right mt-4 font-semibold">Total Amount: ${totalAmount.toFixed(2)}</div>
+          </form>
         </div>
+      )}
+
+      {/* Filter & Search */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Search expenses..."
+            className="px-2 py-1 outline-none w-full"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-4 py-2 border rounded-xl shadow-sm"
+        >
+          <option value="ALL">All Statuses</option>
+          <option value="APPROVED">Approved</option>
+          <option value="PENDING">Pending</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
+      </div>
+
+      {/* Expenditures Table */}
+      <div className="overflow-x-auto bg-white rounded-2xl shadow-lg border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-100">
+            <tr>
+              {["Voucher","Description","Category","Amount","Date","Payment Method","Status","Actions"].map(h => (
+                <th key={h} className="px-6 py-3 text-left text-sm font-medium text-gray-700">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredExpenditures.map((exp, i) => (
+              <tr key={exp.id} className={`transition hover:bg-gray-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                <td className="px-6 py-4">{exp.voucherNumber}</td>
+                <td className="px-6 py-4">{exp.description}</td>
+                <td className="px-6 py-4">{categories.find(c => c.code === exp.expenditureHeadCode)?.name || exp.expenditureHeadCode}</td>
+                <td className="px-6 py-4">{exp.amount?.toFixed(2)} {exp.currencyCode}</td>
+                <td className="px-6 py-4">{exp.expenseDate ? format(new Date(exp.expenseDate), "yyyy-MM-dd") : ""}</td>
+                <td className="px-6 py-4">{paymentMethods.find(pm => pm.id === exp.paymentMethodId)?.name || ""}</td>
+                <td className="px-6 py-4"><StatusBadge status={exp.approvalStatus || ""} /></td>
+                <td className="px-6 py-4 flex gap-2 justify-end">
+                  <button onClick={() => handleEdit(exp)} className="text-blue-600 hover:text-blue-800 transition"><Edit size={18} /></button>
+                  <button onClick={() => handleDelete(exp.id)} className="text-red-600 hover:text-red-800 transition"><Trash2 size={18} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-100 font-semibold">
+              <td colSpan={3} className="px-6 py-3 text-left">Total</td>
+              <td className="px-6 py-3">{totalAmount.toFixed(2)}</td>
+              <td colSpan={4}></td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );

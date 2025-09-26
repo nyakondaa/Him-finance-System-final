@@ -182,6 +182,15 @@ export const updateAsset = (id: any, assetData: any) =>
   apiClient(`/assets/${id}`, "PATCH", assetData);
 export const deleteAsset = (id: any) => apiClient(`/assets/${id}`, "DELETE");
 
+export const getExpenditureHeads = () => apiClient("/expenditure-heads");
+export const addExpenditureHead = (headData: any) =>
+  apiClient("/expenditure-heads", "POST", headData);
+export const updateExpenditureHead = (code: any, headData: any) =>
+  apiClient(`/expenditure-heads/${code}`, "PATCH", headData);
+export const deleteExpenditureHead = (code: any) =>
+  apiClient(`/expenditure-heads/${code}`, "DELETE");
+
+
 // --- EXPENDITURE MANAGEMENT ---
 export const getExpenditures = (params = {}) =>
   apiClient(`/expenditures?${new URLSearchParams(params)}`);
@@ -194,6 +203,9 @@ export const deleteExpenditure = (id: any) =>
   apiClient(`/expenditures/${id}`, "DELETE");
 export const approveExpenditure = (id: any) =>
   apiClient(`/expenditures/${id}/approve`, "POST");
+
+
+
 
 // --- SUPPLIER MANAGEMENT ---
 export const getSuppliers = (params = {}) =>
@@ -331,13 +343,6 @@ export const deleteRevenueHead = (code: any) =>
   apiClient(`/revenue-heads/${code}`, "DELETE");
 
 // --- EXPENDITURE HEADS ---
-export const getExpenditureHeads = () => apiClient("/expenditure-heads");
-export const addExpenditureHead = (headData: any) =>
-  apiClient("/expenditure-heads", "POST", headData);
-export const updateExpenditureHead = (code: any, headData: any) =>
-  apiClient(`/expenditure-heads/${code}`, "PATCH", headData);
-export const deleteExpenditureHead = (code: any) =>
-  apiClient(`/expenditure-heads/${code}`, "DELETE");
 
 // --- REPORTS ---
 export const getReport = (params = {}) =>
