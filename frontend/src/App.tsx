@@ -36,7 +36,7 @@ export default function App() {
                         <Route index element={<DashboardPage showModal={showModal} />} />
                         <Route path="users" element={<UserManagementPage showModal={showModal} />} />
                         <Route path="members" element={<MembersPage  />} />
-                        <Route path="expenses" element={<ExpensesPage />} />
+                        <Route path="expenses" element={<ExpensesPage showModal={showModal} />} />
                         <Route path="revenue-heads" element={<RevenueHeadsPage showModal={showModal} />} />
                         <Route path="expenditure-heads" element={<ExpenditureHeadsPage showModal={showModal} />} />
                         <Route path="transactions" element={<TransactionsPage  />} />

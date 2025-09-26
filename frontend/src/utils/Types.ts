@@ -57,3 +57,18 @@ export  interface Member {
     balance: string; // Prisma Decimal serialized as string in JSON    
     transactions: Transaction[];
   }
+
+ export interface Expenditure {
+  id: number;
+  voucherNumber: string;
+  expenditureHeadCode: string;
+  description: string;
+  amount: number;
+  totalAmount: number;
+  currencyCode: string;
+  paymentMethodId: number;
+  branchCode: string;
+  expenseDate: string;
+  isRecurring: boolean;
+  approvalStatus: string;
+}
