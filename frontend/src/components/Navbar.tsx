@@ -71,7 +71,7 @@ const Navbar = () => {
         { to: "/", icon: <Home className="w-5 h-5" />, text: "Dashboard" },
         { to: "/receipting", icon: <Receipt className="w-5 h-5" />, text: "Payments" },
         { to: "/reports", icon: <FileText className="w-5 h-5" />, text: "Reports" },
-        { to: "/transactions", icon: <Banknote className="w-5 h-5" />, text: "Transactions" },
+        { to: "/transactions", icon: <Banknote className="w-5 h-5" />, text: "Accounts" },
     ];
 
     const adminItems = [

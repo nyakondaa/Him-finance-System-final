@@ -15,9 +15,7 @@ export interface Transaction {
   referenceNumber?: string;
   status: string;
   updatedAt: string;
-  userId: number;
-
-  
+  userId: number;  
   branch?: { code: string; name: string };
   currency?: { code: string; name: string };
   member?: { id: number; firstName: string; lastName: string };
@@ -52,9 +50,10 @@ export  interface Member {
   }
 
   export interface Account {    
-    accountNumber: string;
-    accountType: string;
-    balance: string; // Prisma Decimal serialized as string in JSON    
+    accountName: string;
+    debitBalance?: number;
+    creditBalance?: number;
+    balance: string; 
     transactions: Transaction[];
   }
 

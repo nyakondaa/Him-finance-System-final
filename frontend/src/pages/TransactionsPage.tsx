@@ -1,393 +1,235 @@
-import { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useState } from "react";
+import { Plus, Search, Eye } from "lucide-react";
 import {
-  getTransactions,
-  refundTransaction,
-  checkPermission,
-  getTransactionById,
+  getExpenditures,
   getRevenueHeads,
+  getTransactionById,
+  getTransactions,
+} from "@/services/api";
 
-} from "../services/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Search, RefreshCw } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import useAuth from "@/hooks/useAuth";
-import type { Transaction, Account, Member } from "../utils/Types";
+import type { Account, Transaction } from "@/utils/Types";
 
-const formatDate = (dateString: string | number | Date) => {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const accountsData = [
+  {
+    name: "Tithes",
+    debit: 5000.0,
+    credit: 12000.0,
+    balance: 7000.0,
+    branch: "Main Branch",
+  },
+  {
+    name: "Pledges",
+    debit: 2000.0,
+    credit: 8000.0,
+    balance: 6000.0,
+    branch: "Main Branch",
+  },
+  {
+    name: "Donations",
+    debit: 1500.0,
+    credit: 5500.0,
+    balance: 4000.0,
+    branch: "Main Branch",
+  },
+  {
+    name: "Love & Offerings",
+    debit: 800.0,
+    credit: 3200.0,
+    balance: 2400.0,
+    branch: "Main Branch",
+  },
+  {
+    name: "Expenses",
+    debit: 3000.0,
+    credit: 500.0,
+    balance: -2500.0,
+    branch: "Main Branch",
+  },
+];
 
-const formatCurrency = (
-  amount: number,
-  currency: string | { code?: string } | null | undefined = "USD"
-) => {
-  // Extract currency code safely, default to USD if missing
-  const currencyCode =
-    typeof currency === "string"
-      ? currency
-      : currency && currency.code
-      ? currency.code
-      : "USD";
+const ACCOUNT_TYPES = ["All Accounts", "Income Accounts", "Expense Accounts"];
 
+// --- Helper Functions ---
+const formatCurrency = (amount) => {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: currencyCode,
+    currency: "USD",
     minimumFractionDigits: 2,
-  }).format(amount || 0);
+  }).format(amount);
 };
 
-const TransactionsPage = () => {
-  const { currentUser } = useAuth();
-  const queryClient = useQueryClient();
+// --- Main Component ---
+export default function AccountsPage() {
+  const [activeTab, setActiveTab] = useState("All Accounts");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTransactionId, setSelectedTransactionId] = useState<
-    string | null
-  >(null);
-  const [refundReason, setRefundReason] = useState("");
-  const [showRefundDialog, setShowRefundDialog] = useState(false);
-
+  const [filteredAccounts, setFilteredAccounts] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
 
-  const {
-    data: transactions,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ["transactions", searchTerm],
-    queryFn: () => getTransactions({ search: searchTerm }),
-  });
-
-  const { data: transactionDetails } = useQuery({
-    queryKey: ["transactionDetails", selectedTransactionId],
-    queryFn: () => getTransactionById(selectedTransactionId!),
-    enabled: !!selectedTransactionId,
-  });
-
-  const refundMutation = useMutation({
-    mutationFn: (refundData: { reason: string; processedBy: string }) =>
-      refundTransaction(selectedTransactionId!, refundData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      setShowRefundDialog(false);
-      setSelectedTransactionId(null);
-      setRefundReason("");
-    },
-  });
-
-  const handleRefundClick = (transactionId: string) => {
-    if (!checkPermission(currentUser, "transactions", "refund")) {
-      alert("You are not authorized to process refunds");
-      return;
-    }
-    setSelectedTransactionId(transactionId);
-    setShowRefundDialog(true);
-  };
-
-  const handleRefundSubmit = () => {
-    if (!refundReason.trim()) return;
-    refundMutation.mutate({
-      reason: refundReason,
-      processedBy: currentUser?.username || "admin",
-    });
-  };
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "default";
-      case "refunded":
-        return "destructive";
-      case "pending":
-        return "secondary";
-      default:
-        return "outline";
-    }
-  };
-
-  const getAccounts = async () => {
-
-    const revenueHead = await getRevenueHeads();
-    //const expenditureHead = await getExpenditureHeads();
-
-    const revenueAccount: Account[] = await Promise.all(
-      revenueHead.map(async (head: any) => {
-        const transactions = await getTransactions({
-          revenueHeadCode: head.code,
-        });
-
-        return {
-          accountNumber: head.code,
-          accountType: head.name,
-          balance: "0.00", // you can compute from transactions if needed
-          transactions: transactions.transactions, // assuming API response has { transactions: [...] }
-        };
-      })
-    );
-
-    /*
-    const expenditureAccount: Account[] = await Promise.all(
-      expenditureHead.map(async (head: any) => {
-        const transactions = await getTransactions({
-          revenueHeadCode: head.code,
-        });
-
-        return {
-          accountNumber: head.code,
-          accountType: head.name,
-          balance: "0.00", // you can compute from transactions if needed
-          transactions: transactions.transactions, // assuming API response has { transactions: [...] }
-        };
-      })
-    );
-
-    */
-
-    console.log("Revenue Accounts:", revenueAccount);
-
-
-
-    //setAccounts(allAccounts);
-  };
-/*
   useEffect(() => {
-    getAccounts();
+    async function fetchData() {
+      try {
+        const transactionsRes = await getTransactions(); // your merged transactions
+        const revenueHeads = await getRevenueHeads();
+
+        // Merge transactions with revenue head names
+        const mergedTransactions = transactionsRes.transactions.map((tx) => {
+          const head = revenueHeads.find((h) => h.code === tx.revenueHeadCode);
+          return {
+            ...tx,
+            revenueHeadName: head ? head.name : "Unknown",
+          };
+        });
+
+        // Generate accounts dynamically from revenue heads
+        const accountsWithTransactions: Account[] = revenueHeads.map((head) => {
+          const accountTransactions = mergedTransactions.filter(
+            (tx) => tx.revenueHeadCode === head.code
+          );
+
+          // Calculate balance if needed, here just sum amounts
+          const balance = accountTransactions.reduce(
+            (sum, tx) => sum + parseFloat(tx.amount),
+            0
+          );
+
+          return {
+            accountName: head.name,
+            balance: balance.toString(),
+            debitBalance: undefined,
+            creditBalance: undefined,
+            transactions: accountTransactions,
+          };
+        });
+
+        setAccounts(accountsWithTransactions);
+        setFilteredAccounts(mergedTransactions);
+
+        console.log("Accounts with transactions:", accountsWithTransactions);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    fetchData();
   }, []);
 
-
-  */
+  const getBalanceClass = (balance) => {
+    if (balance > 0) return "text-green-600 font-semibold";
+    if (balance < 0) return "text-red-600 font-semibold";
+    return "text-gray-700";
+  };
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Transactions</h1>
-        <div className="flex space-x-2">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Header and Action Button */}
+        <header className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-extrabold text-gray-900">Accounts</h1>
+          <button
+            onClick={() => console.log("New Account action")}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 transition duration-300 transform hover:scale-[1.02]"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            New Account
+          </button>
+        </header>
+
+        {/* Account Type Tabs */}
+        <div className="flex space-x-4 border-b border-gray-200 mb-6">
+          {ACCOUNT_TYPES.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`pb-2 px-1 text-base font-medium transition duration-150 ease-in-out 
+                                ${
+                                  activeTab === tab
+                                    ? "text-blue-600 border-b-2 border-blue-600"
+                                    : "text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                                }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Bar */}
+        <div className="mb-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search transactions..."
-              className="pl-9 w-[200px]"
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search accounts by name or branch..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full p-3 pl-10 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500 shadow-sm"
             />
           </div>
-          <Button variant="outline" size="icon" onClick={() => refetch()}>
-            <RefreshCw
-              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-            />
-          </Button>
+        </div>
+
+        {/* Accounts Table */}
+        <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                  Account Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                  Transactions
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                  Account Balance
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">
+                  Branch
+                </th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8"></th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {accountsData.map((account, index) => (
+                <tr
+                  key={index}
+                  className="hover:bg-gray-50 transition duration-150"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {account.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <span className="text-red-500 mr-3">
+                      Debit: {formatCurrency(account.debit)}
+                    </span>
+                    <span className="text-green-600">
+                      Credit: {formatCurrency(account.credit)}
+                    </span>
+                  </td>
+                  <td
+                    className={`px-6 py-4 whitespace-nowrap text-sm ${getBalanceClass(
+                      account.balance
+                    )}`}
+                  >
+                    {formatCurrency(account.balance)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {account.branch}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <button
+                      onClick={() =>
+                        console.log(`Viewing details for ${account.name}`)
+                      }
+                      className="text-blue-600 hover:text-blue-800 flex items-center justify-center transition duration-150"
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-
-      {isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            {error?.message || "Failed to load transactions"}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[120px]">ID</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Method</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  Loading...
-                </TableCell>
-              </TableRow>
-            ) : transactions?.transactions?.length > 0 ? (
-              transactions.transactions.map((transaction: any) => (
-                <TableRow key={transaction.id}>
-                  <TableCell className="font-medium">
-                    {transaction.receiptNumber}
-                  </TableCell>
-                  <TableCell>
-                    {formatDate(transaction.transactionDate)}
-                  </TableCell>
-                  <TableCell>
-                    {transaction.payerName ||
-                      `${transaction.member?.firstName || ""} ${
-                        transaction.member?.lastName || ""
-                      }`}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(transaction.amount, transaction.currency)}
-                  </TableCell>
-                  <TableCell>
-                    {transaction.paymentMethod?.name ||
-                      transaction.paymentMethod ||
-                      "Card"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(transaction.status)}>
-                      {transaction.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedTransactionId(transaction.id)}
-                    >
-                      Details
-                    </Button>
-                    {transaction.status === "completed" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 border-red-200"
-                        onClick={() => handleRefundClick(transaction.id)}
-                      >
-                        Refund
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  No transactions found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog
-        open={!!selectedTransactionId}
-        onOpenChange={(open) => !open && setSelectedTransactionId(null)}
-      >
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Transaction Details</DialogTitle>
-          </DialogHeader>
-          {transactionDetails && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Transaction ID</Label>
-                  <p>{transactionDetails.receiptNumber}</p>
-                </div>
-                <div>
-                  <Label>Date</Label>
-                  <p>{formatDate(transactionDetails.transactionDate)}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Customer</Label>
-                  <p>{transactionDetails.payerName}</p>
-                </div>
-                <div>
-                  <Label>Payment Method</Label>
-                  <p>{transactionDetails.paymentMethod || "Card"}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Amount</Label>
-                  <p className="font-medium">
-                    {formatCurrency(
-                      transactionDetails.amount,
-                      transactionDetails.currency
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Badge
-                    variant={getStatusBadgeVariant(transactionDetails.status)}
-                  >
-                    {transactionDetails.status}
-                  </Badge>
-                </div>
-              </div>
-              {transactionDetails.refundReason && (
-                <div>
-                  <Label>Refund Reason</Label>
-                  <p>{transactionDetails.refundReason}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showRefundDialog} onOpenChange={setShowRefundDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Process Refund</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="reason">Reason</Label>
-              <Textarea
-                id="reason"
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                placeholder="Enter refund reason..."
-              />
-            </div>
-          </div>
-          <div className="flex justify-end space-x-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowRefundDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleRefundSubmit}
-              disabled={!refundReason.trim() || refundMutation.isPending}
-            >
-              {refundMutation.isPending ? "Processing..." : "Confirm Refund"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
-};
-
-export default TransactionsPage;
+}
