@@ -2,50 +2,12 @@ import React, { useEffect, useState } from "react";
 import { Plus, Search, Eye } from "lucide-react";
 import {
   getExpenditures,
+  getExpenditureHeads,
   getRevenueHeads,
-  getTransactionById,
   getTransactions,
 } from "@/services/api";
 
-import type { Account, Transaction } from "@/utils/Types";
-
-const accountsData = [
-  {
-    name: "Tithes",
-    debit: 5000.0,
-    credit: 12000.0,
-    balance: 7000.0,
-    branch: "Main Branch",
-  },
-  {
-    name: "Pledges",
-    debit: 2000.0,
-    credit: 8000.0,
-    balance: 6000.0,
-    branch: "Main Branch",
-  },
-  {
-    name: "Donations",
-    debit: 1500.0,
-    credit: 5500.0,
-    balance: 4000.0,
-    branch: "Main Branch",
-  },
-  {
-    name: "Love & Offerings",
-    debit: 800.0,
-    credit: 3200.0,
-    balance: 2400.0,
-    branch: "Main Branch",
-  },
-  {
-    name: "Expenses",
-    debit: 3000.0,
-    credit: 500.0,
-    balance: -2500.0,
-    branch: "Main Branch",
-  },
-];
+import type { Account, Transaction, Expenditure } from "@/utils/Types";
 
 const ACCOUNT_TYPES = ["All Accounts", "Income Accounts", "Expense Accounts"];
 
@@ -64,12 +26,15 @@ export default function AccountsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredAccounts, setFilteredAccounts] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
 
   useEffect(() => {
     async function fetchData() {
       try {
         const transactionsRes = await getTransactions(); // your merged transactions
         const revenueHeads = await getRevenueHeads();
+
+        //merge expenditures with expenditure head names
 
         // Merge transactions with revenue head names
         const mergedTransactions = transactionsRes.transactions.map((tx) => {
@@ -101,8 +66,59 @@ export default function AccountsPage() {
           };
         });
 
-        setAccounts(accountsWithTransactions);
+        const expendituresRes = await getExpenditures({
+          limit: 100,
+          offset: 0,
+        });
+        const expenditureHeadsRes = await getExpenditureHeads();
+
+        const expendituresData: Expenditure[] = expendituresRes.expenditures;
+
+        // Merge each expenditure with its head name
+        const mergedExpenditures = expendituresData.map((exp) => {
+          const head = expenditureHeadsRes.find(
+            (h) => h.code === exp.expenditureHeadCode
+          );
+          return {
+            ...exp,
+            expenditureHeadName: head ? head.name : "Unknown",
+          };
+        });
+
+        // Generate accounts dynamically grouped by expenditure head
+        const accountsWithExpenditures: Account[] = expenditureHeadsRes.map(
+          (head) => {
+            const accountExpenditures = mergedExpenditures.filter(
+              (exp) => exp.expenditureHeadCode === head.code
+            );
+
+            const balance = accountExpenditures.reduce(
+              (sum, e) => sum + parseFloat(e.totalAmount ?? e.amount),
+              0
+            );
+
+            return {
+              accountName: head.name,
+              balance,
+              debitBalance: undefined,
+              creditBalance: balance.toString(),
+              expenditures: accountExpenditures,
+            };
+          }
+        );
+
+        console.log("Accounts with expenditures:", accountsWithExpenditures);
+        console.log("Merged Expenditures:", mergedExpenditures);
+
+        setExpenditures(mergedExpenditures);
         setFilteredAccounts(mergedTransactions);
+
+        const allAccounts: Account[] = [
+          ...accountsWithTransactions,
+          ...accountsWithExpenditures,
+        ];
+
+        setAccounts(allAccounts);
 
         console.log("Accounts with transactions:", accountsWithTransactions);
       } catch (err) {
@@ -180,7 +196,7 @@ export default function AccountsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                   Account Balance
                 </th>
-               
+
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8"></th>
               </tr>
             </thead>
@@ -195,10 +211,16 @@ export default function AccountsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <span className="text-red-500 mr-3">
-                      Credit: {formatCurrency(account.creditBalance ? account.creditBalance:  0)}
+                      Credit:{" "}
+                      {formatCurrency(
+                        account.creditBalance ? account.creditBalance : 0
+                      )}
                     </span>
                     <span className="text-green-600">
-                      Debit: {formatCurrency(account.debitBalance ? account.debitBalance: 0)}
+                      Debit:{" "}
+                      {formatCurrency(
+                        account.debitBalance ? account.debitBalance : 0
+                      )}
                     </span>
                   </td>
                   <td
@@ -208,7 +230,7 @@ export default function AccountsPage() {
                   >
                     {formatCurrency(account.balance)}
                   </td>
-                  
+
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                     <button
                       onClick={() =>

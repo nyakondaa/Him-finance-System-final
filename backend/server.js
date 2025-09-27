@@ -638,16 +638,16 @@ const expenditureCreateSchema = Joi.object({
   expenditureHeadCode: Joi.string().required(),
   projectId: Joi.number().integer().positive().allow(null),
   milestoneId: Joi.number().integer().positive().allow(null), // Added from Prisma model
-  
-  supplier: Joi.string().allow(null, '').optional(),
+
+  supplier: Joi.string().allow(null, "").optional(),
   description: Joi.string().trim().min(3).max(500).required(),
-  
+
   // FIX: This field is REQUIRED for the totalAmount calculation
-  amount: Joi.number().min(0.01).precision(2).required(), 
-  
+  amount: Joi.number().min(0.01).precision(2).required(),
+
   taxAmount: Joi.number().min(0).precision(2).default(0),
   totalAmount: Joi.any().forbidden(), // Correctly forbidden as server calculates it
-  
+
   currencyCode: Joi.string().length(3).default("USD"),
   paymentMethodId: Joi.number().integer().positive().required(),
   referenceNumber: Joi.string().trim().max(50).allow("", null),
@@ -655,9 +655,11 @@ const expenditureCreateSchema = Joi.object({
   expenseDate: Joi.date().default(() => new Date()),
   dueDate: Joi.date().allow(null),
   paymentDate: Joi.date().allow(null), // Added from Prisma model
-  
+
   // Missing fields for completeness (frequency, isRecurring, recurringUntil, tags)
-  frequency: Joi.string().valid("ONE_TIME", "DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUALLY").default("ONE_TIME"),
+  frequency: Joi.string()
+    .valid("ONE_TIME", "DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUALLY")
+    .default("ONE_TIME"),
   urgency: Joi.string()
     .valid("LOW", "NORMAL", "HIGH", "CRITICAL", "EMERGENCY")
     .default("NORMAL"),
@@ -666,15 +668,15 @@ const expenditureCreateSchema = Joi.object({
 
   isReimbursement: Joi.boolean().default(false),
   reimbursedTo: Joi.number().integer().positive().allow(null),
-  
+
   // approvalStatus and budgetYear are set by the server, but need to be forbidden if sent
-  approvalStatus: Joi.any().forbidden(), 
-  budgetYear: Joi.any().forbidden(), 
-  
+  approvalStatus: Joi.any().forbidden(),
+  budgetYear: Joi.any().forbidden(),
+
   notes: Joi.string().trim().max(500).allow("", null),
   internalNotes: Joi.string().trim().max(500).allow("", null), // Added from Prisma model
   tags: Joi.array().items(Joi.string()).default([]), // Added from Prisma model
-  
+
   // Fields that should only be set on update/approval
   approvedBy: Joi.any().forbidden(),
   approvedAt: Joi.any().forbidden(),
@@ -3202,7 +3204,8 @@ app.post(
     if (error) throw new ValidationError(error.details[0].message);
 
     // Calculate total amount
-    value.totalAmount = parseFloat(value.amount) + parseFloat(value.taxAmount || 0)
+    value.totalAmount =
+      parseFloat(value.amount) + parseFloat(value.taxAmount || 0);
 
     // Verify required relations exist
     const [expenditureHead, currency, paymentMethod, branch] =
@@ -3232,8 +3235,6 @@ app.post(
       if (!reimbursee) throw new NotFoundError("Reimbursed member not found.");
     }
 
-    
-
     const expenditure = await prisma.$transaction(async (tx) => {
       const voucherNumber = await generateReceiptNumber(
         "expenditure",
@@ -3250,7 +3251,6 @@ app.post(
           amount: new Prisma.Decimal(value.amount),
           taxAmount: new Prisma.Decimal(value.taxAmount || 0),
           totalAmount: new Prisma.Decimal(value.totalAmount),
-         
         },
         include: {
           expenditureHead: { select: { name: true } },
@@ -3258,8 +3258,6 @@ app.post(
           currency: { select: { code: true, symbol: true } },
           paymentMethod: { select: { name: true } },
           requester: { select: { username: true } },
-
-      
         },
       });
     });
@@ -3303,22 +3301,28 @@ app.get(
 
     let whereClause = {};
 
-    if (!req.user.role.permissions.expenditures?.includes("read_all")) {
-      whereClause.branchCode = req.user.branchCode;
-    } else if (branchCode) {
-      whereClause.branchCode = branchCode;
+  
+
+    // Approval status
+    if (approvalStatus && approvalStatus.trim() !== "") {
+      whereClause.approvalStatus = approvalStatus;
     }
 
-    if (approvalStatus) whereClause.approvalStatus = approvalStatus;
-
-    if (startDate || endDate) {
+    // Expense date range
+    if (
+      (startDate && startDate.trim() !== "") ||
+      (endDate && endDate.trim() !== "")
+    ) {
       whereClause.expenseDate = {};
-      if (startDate) whereClause.expenseDate.gte = new Date(startDate);
-      if (endDate)
+      if (startDate && startDate.trim() !== "")
+        whereClause.expenseDate.gte = new Date(startDate);
+      if (endDate && endDate.trim() !== "")
         whereClause.expenseDate.lt = new Date(
           new Date(endDate).setDate(new Date(endDate).getDate() + 1)
         );
     }
+
+    console.log("whereClause used:", whereClause);
 
     const [expenditures, total] = await Promise.all([
       prisma.expenditure.findMany({
@@ -3329,7 +3333,7 @@ app.get(
         include: {
           expenditureHead: { select: { name: true } },
           project: { select: { name: true } },
-          
+
           currency: { select: { code: true, symbol: true } },
           paymentMethod: { select: { name: true } },
           requester: { select: { username: true } },
@@ -3408,12 +3412,10 @@ app.patch(
       req
     );
 
-    res
-      .status(200)
-      .json({
-        message: "Expenditure updated successfully.",
-        expenditure: updatedExpenditure,
-      });
+    res.status(200).json({
+      message: "Expenditure updated successfully.",
+      expenditure: updatedExpenditure,
+    });
   })
 );
 
@@ -3583,12 +3585,10 @@ app.patch(
       req
     );
 
-    res
-      .status(200)
-      .json({
-        message: "Supplier updated successfully.",
-        supplier: updatedSupplier,
-      });
+    res.status(200).json({
+      message: "Supplier updated successfully.",
+      supplier: updatedSupplier,
+    });
   })
 );
 
@@ -4011,12 +4011,10 @@ app.patch(
       req
     );
 
-    res
-      .status(200)
-      .json({
-        message: "Contract updated successfully.",
-        contract: updatedContract,
-      });
+    res.status(200).json({
+      message: "Contract updated successfully.",
+      contract: updatedContract,
+    });
   })
 );
 
@@ -4183,12 +4181,10 @@ app.patch(
       req
     );
 
-    res
-      .status(200)
-      .json({
-        message: "Budget period updated successfully.",
-        budgetPeriod: updatedPeriod,
-      });
+    res.status(200).json({
+      message: "Budget period updated successfully.",
+      budgetPeriod: updatedPeriod,
+    });
   })
 );
 
@@ -5331,12 +5327,10 @@ app.post(
       logger.info(
         `Password reset requested for non-existent user: ${username}`
       );
-      return res
-        .status(200)
-        .json({
-          message:
-            "If a matching account is found, a password reset link will be sent.",
-        });
+      return res.status(200).json({
+        message:
+          "If a matching account is found, a password reset link will be sent.",
+      });
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -5360,12 +5354,10 @@ app.post(
       )}...`
     );
     // TODO: Implement email sending logic here
-    res
-      .status(200)
-      .json({
-        message:
-          "If a matching account is found, a password reset link will be sent.",
-      });
+    res.status(200).json({
+      message:
+        "If a matching account is found, a password reset link will be sent.",
+    });
   })
 );
 
