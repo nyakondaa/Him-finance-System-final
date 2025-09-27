@@ -95,7 +95,7 @@ export default function AccountsPage() {
           return {
             accountName: head.name,
             balance: balance.toString(),
-            debitBalance: undefined,
+            debitBalance: balance.toString(),
             creditBalance: undefined,
             transactions: accountTransactions,
           };
@@ -180,27 +180,25 @@ export default function AccountsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                   Account Balance
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">
-                  Branch
-                </th>
+               
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8"></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {accountsData.map((account, index) => (
+              {accounts.map((account, index) => (
                 <tr
                   key={index}
                   className="hover:bg-gray-50 transition duration-150"
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {account.name}
+                    {account.accountName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <span className="text-red-500 mr-3">
-                      Debit: {formatCurrency(account.debit)}
+                      Credit: {formatCurrency(account.creditBalance ? account.creditBalance:  0)}
                     </span>
                     <span className="text-green-600">
-                      Credit: {formatCurrency(account.credit)}
+                      Debit: {formatCurrency(account.debitBalance ? account.debitBalance: 0)}
                     </span>
                   </td>
                   <td
@@ -210,9 +208,7 @@ export default function AccountsPage() {
                   >
                     {formatCurrency(account.balance)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {account.branch}
-                  </td>
+                  
                   <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                     <button
                       onClick={() =>
