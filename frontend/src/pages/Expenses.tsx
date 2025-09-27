@@ -1,413 +1,342 @@
-// ExpenditurePage.tsx
-import React, { useEffect, useState } from "react";
-import { Plus, Save, Edit, Trash2, Search } from "lucide-react";
-import { format } from "date-fns";
+'use client'
+
+import { useEffect, useState } from 'react'
+import { format } from 'date-fns'
+import { Plus, X, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'react-toastify'; // FIX: Changed from custom useToast hook to direct react-toastify import
+
 import {
-  getExpenditureHeads,
-  getExpenditures,
-  getPaymentMethods,
-  updateExpenditure,
-  createExpenditure,
-  deleteExpenditure,
   getBranches,
   getMembers,
-} from "@/services/api";
-import type { Expenditure } from "@/utils/Types";
+  getExpenditureHeads,
+  getCurrencies,
+  getPaymentMethods,
+  createExpenditure,
+} from '@/services/api'
 
-const ExpenditurePage = () => {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-  const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
+interface Expenditure {
+  id: number
+  description: string
+  expenditureHeadCode: string
+  amount: number
+  taxAmount?: number
+  totalAmount?: number
+  paymentMethodId?: number
+  currencyCode?: string
+  voucherNumber?: string
+  branchCode?: string
+  expenseDate?: string
+  approvalStatus?: string
+  isReimbursement?: boolean
+  reimbursedTo?: number
+}
 
-  const [formData, setFormData] = useState<Partial<Expenditure>>({
-    currencyCode: "USD", // Default currency
-    taxAmount: 0, // Default tax amount
-    isReimbursement: false, // Default
-  });
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [isFormVisible, setIsFormVisible] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+// Data structures for lookups
+interface LookupItem {
+  code: string;
+  name: string;
+}
+interface PaymentMethodItem {
+  id: number;
+  name: string;
+}
 
-  // Fetch all data on mount
+export default function ExpensesPage() {
+  const [categories, setCategories] = useState<LookupItem[]>([])
+  const [branches, setBranches] = useState<LookupItem[]>([])
+  const [currencies, setCurrencies] = useState<LookupItem[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodItem[]>([])
+
+  // Form State
+  const [description, setDescription] = useState('')
+  const [amount, setAmount] = useState<string>('')
+  const [taxAmount, setTaxAmount] = useState<string>('')
+  const [categoryCode, setCategoryCode] = useState('')
+  const [currencyCode, setCurrencyCode] = useState('')
+  const [paymentMethodId, setPaymentMethodId] = useState('')
+  const [branchCode, setBranchCode] = useState('')
+  const [expenseDate, setExpenseDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   useEffect(() => {
+    // Only fetching required lookup data
     const fetchData = async () => {
       try {
-        const [catRes, payRes, expRes, branchesRes, membersRes] = await Promise.all([
+        const [cats, brs, curs, pay] = await Promise.all([
           getExpenditureHeads(),
-          getPaymentMethods(),     
-          getExpenditures(),   
           getBranches(),
-          getMembers(), // Add this line to fetch members
-        ]);
+          getCurrencies(),
+          getPaymentMethods()
+        ])
 
-        setCategories(Array.isArray(catRes?.data || catRes) ? catRes?.data || catRes : []);
-        setPaymentMethods(Array.isArray(payRes?.data || payRes) ? payRes?.data || payRes : []);
-        setExpenditures(Array.isArray(expRes?.data || expRes) ? expRes?.data || expRes : []);
-        setBranches(Array.isArray(branchesRes?.data || branchesRes) ? branchesRes?.data || branchesRes : []);
-        setMembers(Array.isArray(membersRes?.data || membersRes) ? membersRes?.data || membersRes : []);
-        
-        console.log("Fetched branches:", branchesRes);
-        console.log("Fetched categories:", catRes);
-        console.log("Fetched payment methods:", payRes);
-        console.log("Fetched expenditures:", expRes);
-        console.log("Fetched members:", membersRes); // Add this log
-      } catch (err) {
-        console.error("Error fetching data", err);
-      } finally {
-        setLoading(false);
+        setCategories(Array.isArray(cats) ? cats : cats?.data || [])
+        setBranches(Array.isArray(brs) ? brs : brs?.data || [])
+        setCurrencies(Array.isArray(curs) ? curs : curs?.data || [])
+        setPaymentMethods(Array.isArray(pay) ? pay : pay?.data || [])
+
+      } catch (error) {
+        console.error("Failed to fetch initial data:", error)
+        // FIX: Using react-toastify error method
+        toast.error("Could not load necessary form data. Please try again.")
       }
-    };
-    fetchData();
-  }, []);
+    }
 
-  const handleChange = (field: string, value: any) =>
-    setFormData({ ...formData, [field]: value });
+    fetchData()
+  }, [])
+
+  // Helper to calculate total amount (used only for display)
+  const totalAmount = (Number(amount) || 0) + (Number(taxAmount) || 0)
 
   const resetForm = () => {
-    setFormData({ currencyCode: "USD", taxAmount: 0, isReimbursement: false });
-    setIsEditing(false);
-    setEditingId(null);
-  };
+    setDescription('')
+    setAmount('')
+    setTaxAmount('')
+    setCategoryCode('')
+    setCurrencyCode('')
+    setPaymentMethodId('')
+    setBranchCode('')
+    setExpenseDate(format(new Date(), 'yyyy-MM-dd'))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    const data = {
+      description,
+      amount: parseFloat(amount),
+      taxAmount: parseFloat(taxAmount) || 0,
+      expenditureHeadCode: categoryCode,
+      currencyCode,
+      paymentMethodId: parseInt(paymentMethodId),
+      branchCode,
+      expenseDate,
+      
+    }
+
     try {
-      // Ensure required fields are present before submission logic
-      if (!formData.amount || !formData.currencyCode || !formData.expenditureHeadCode || !formData.paymentMethodId || !formData.branchCode || !formData.expenseDate || !formData.description) {
-         throw new Error("Missing required fields.");
-      }
-
-      // Calculate total amount locally (optional for display/local checks, but not sent)
-      const amount = parseFloat(formData.amount as any);
-      const taxAmount = parseFloat((formData.taxAmount || 0) as any);
+      const res = await createExpenditure(data)
       
-      // 👇 CRITICAL FIX: Destructure to omit totalAmount from the payload
-      const { totalAmount: omittedTotalAmount, ...dataToSend } = formData;
+      // FIX: Using react-toastify success method
+      toast.success(`Expense successfully saved`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      });
       
-      if (isEditing && editingId) await updateExpenditure(editingId, dataToSend);
-      else await createExpenditure(dataToSend);
+      resetForm()
 
-      const updated = await getExpenditures();
-      setExpenditures(Array.isArray(updated?.data || updated) ? updated?.data || updated : []);
-      resetForm();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error("Expense creation failed:", error)
+      // FIX: Using react-toastify error method
+      toast.error("There was an error saving the expense. Please check your inputs and try again.")
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
-
-  const handleEdit = (exp: Expenditure) => {
-    setFormData({
-        ...exp,
-        // The date field in the form needs a 'YYYY-MM-DD' string
-        expenseDate: exp.expenseDate ? format(new Date(exp.expenseDate), "yyyy-MM-dd") : undefined,
-    });
-    setEditingId(exp.id);
-    setIsEditing(true);
-    setIsFormVisible(true);
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this expenditure?")) return;
-    try {
-      await deleteExpenditure(id);
-      setExpenditures((prev) => prev.filter((e) => e.id !== id));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const filteredExpenditures = Array.isArray(expenditures)
-    ? expenditures.filter((exp) => {
-        const matchesSearch =
-          exp.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          exp.voucherNumber?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus =
-          statusFilter === "ALL" || exp.approvalStatus === statusFilter;
-        return matchesSearch && matchesStatus;
-      })
-    : [];
-
-  const totalAmount = filteredExpenditures.reduce(
-    (sum, exp) => sum + (exp.amount || 0),
-    0
-  );
-
-  const StatusBadge = ({ status }: { status: string }) => {
-    const config: Record<string, { color: string; label: string }> = {
-      APPROVED: { color: "bg-green-100 text-green-800", label: "Approved" },
-      PENDING: { color: "bg-yellow-100 text-yellow-800", label: "Pending" },
-      REJECTED: { color: "bg-red-100 text-red-800", label: "Rejected" },
-    };
-    const c = config[status] || { color: "bg-gray-100 text-gray-800", label: status };
-    return (
-      <span className={`px-3 py-1 text-xs font-semibold rounded-full ${c.color}`}>
-        {c.label}
-      </span>
-    );
-  };
-
-  if (loading) return <div className="p-6 text-center text-gray-500">Loading...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 font-[Inter]">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between mb-6 items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Expense Management</h1>
-          <p className="text-gray-600 mt-1">Track and manage church financial expenditures</p>
-        </div>
-        <button
-          onClick={() => setIsFormVisible(!isFormVisible)}
-          className="px-6 py-3 bg-blue-600 text-white rounded-xl flex items-center gap-2 hover:bg-blue-700 transition shadow-md"
-        >
-          <Plus size={18} />
-          {isFormVisible ? "Hide Form" : "Add New Expense"}
-        </button>
-      </div>
+    <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
+      <Card className="max-w-full mx-auto shadow-lg border-t-4 border-blue-600">
+        <CardHeader>
+          <CardTitle className="text-3xl font-bold text-gray-800 flex items-center">
+            <Plus className="w-6 h-6 mr-2 text-blue-600" />
+            Record New Expense
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 pt-4">
+          <p className="text-gray-600 mb-6">Fill in the details below to record a new expenditure.</p>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
 
-      {/* Form */}
-      {isFormVisible && (
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-gray-200 transition-all">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            {isEditing ? "Edit Expense" : "Record New Expense"}
-          </h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Description */}
-            <div className="col-span-1 md:col-span-2 lg:col-span-3">
-              <label className="block text-sm font-medium mb-1">Expense Description *</label>
-              <input
-                type="text"
-                value={formData.description || ""}
-                onChange={(e) => handleChange("description", e.target.value)}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
+            {/* General Details Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="expenseDate">Expense Date *</Label>
+                <Input
+                  id="expenseDate"
+                  type="date"
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  required
+                  className="w-full"
+                />
+              </div>
 
-            {/* Category */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Category *</label>
-              <select
-                value={formData.expenditureHeadCode || ""}
-                onChange={(e) => handleChange("expenditureHeadCode", e.target.value)}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              >
-                <option value="">Select Category</option>
-                {categories.map((c) => (
-                  <option key={c.code} value={c.code}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Amount */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Amount (Excl. Tax) *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.amount || ""}
-                onChange={(e) => handleChange("amount", parseFloat(e.target.value))}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-
-            {/* Tax Amount */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Tax Amount</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.taxAmount || 0}
-                onChange={(e) => handleChange("taxAmount", parseFloat(e.target.value))}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                disabled={isSubmitting}
-              />
-            </div>
-
-            {/* Currency Code */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Currency Code *</label>
-              <input
-                type="text"
-                value={formData.currencyCode || "USD"}
-                onChange={(e) => handleChange("currencyCode", e.target.value)}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-
-            {/* Payment Method */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Payment Method *</label>
-              <select
-                value={formData.paymentMethodId || ""}
-                onChange={(e) => handleChange("paymentMethodId", parseInt(e.target.value))}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              >
-                <option value="">Select Method</option>
-                {paymentMethods.map((pm) => (
-                  <option key={pm.id} value={pm.id}>{pm.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Expense Date */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Expense Date *</label>
-              <input
-                type="date"
-                value={formData.expenseDate?.toString().substring(0, 10) || ""}
-                onChange={(e) => handleChange("expenseDate", e.target.value)}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-
-            {/* Branch */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Branch *</label>
-              <select
-                value={formData.branchCode || ""}
-                onChange={(e) => handleChange("branchCode", e.target.value)}
-                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                required
-                disabled={isSubmitting}
-              >
-                <option value="">Select Branch</option>
-                {branches.map((br) => (
-                  <option key={br.code} value={br.code}>{br.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Is Reimbursement Checkbox */}
-            <div className="flex items-center space-x-2">
-              <input
-                id="isReimbursement"
-                type="checkbox"
-                checked={formData.isReimbursement || false}
-                onChange={(e) => handleChange("isReimbursement", e.target.checked)}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                disabled={isSubmitting}
-              />
-              <label htmlFor="isReimbursement" className="text-sm font-medium">Is Reimbursement?</label>
-            </div>
-            
-            {/* Reimbursed To Member */}
-            {formData.isReimbursement && (
-                <div>
-                <label className="block text-sm font-medium mb-1">Reimbursed To Member *</label>
-                <select
-                    value={formData.reimbursedTo || ""}
-                    onChange={(e) => handleChange("reimbursedTo", parseInt(e.target.value))}
-                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition"
-                    required={formData.isReimbursement}
-                    disabled={isSubmitting}
+              <div className="space-y-2">
+                <Label htmlFor="category">Category *</Label>
+                <Select
+                  value={categoryCode}
+                  onValueChange={setCategoryCode}
+                  required
                 >
-                    <option value="">Select Member</option>
-                    {members.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
+                  <SelectTrigger id="category">
+                    <SelectValue placeholder="Select an expenditure head" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.code} value={cat.code}>
+                        {cat.name}
+                      </SelectItem>
                     ))}
-                </select>
-                </div>
-            )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             
-            {/* Submission buttons */}
-            <div className="col-span-1 md:col-span-2 lg:col-span-3 flex justify-end mt-4">
-              <button
-                type="submit"
+            <div className="space-y-2">
+              <Label htmlFor="description">Description *</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Briefly describe the purpose of the expense..."
+                required
+                rows={3}
+              />
+            </div>
+
+            {/* Financial Details Section */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="amount">Base Amount *</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="0.00"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="taxAmount">Tax/VAT Amount</Label>
+                <Input
+                  id="taxAmount"
+                  type="number"
+                  placeholder="0.00"
+                  step="0.01"
+                  value={taxAmount}
+                  onChange={(e) => setTaxAmount(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency *</Label>
+                <Select
+                  value={currencyCode}
+                  onValueChange={setCurrencyCode}
+                  required
+                >
+                  <SelectTrigger id="currency">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((cur) => (
+                      <SelectItem key={cur.code} value={cur.code}>
+                        {cur.code} - {cur.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Total Amount</Label>
+                <div className="p-2 border rounded-md h-10 flex items-center bg-blue-50/50 font-semibold text-blue-700">
+                  {currencyCode} {totalAmount.toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment and Branch Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="paymentMethod">Payment Method *</Label>
+                <Select
+                  value={paymentMethodId}
+                  onValueChange={setPaymentMethodId}
+                  required
+                >
+                  <SelectTrigger id="paymentMethod">
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.map((pm) => (
+                      <SelectItem key={pm.id} value={String(pm.id)}>
+                        {pm.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="branch">Branch/Location *</Label>
+                <Select
+                  value={branchCode}
+                  onValueChange={setBranchCode}
+                  required
+                >
+                  <SelectTrigger id="branch">
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((b) => (
+                      <SelectItem key={b.code} value={b.code}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-between pt-4 border-t mt-6">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={resetForm}
                 disabled={isSubmitting}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl flex items-center gap-2 hover:bg-blue-700 shadow-md transition"
+                className="text-gray-600 hover:bg-gray-100"
               >
-                <Save size={18} />
-                {isEditing ? "Update Expense" : "Save Expense"}
-              </button>
+                <X className="w-4 h-4 mr-2" />
+                Clear Form
+              </Button>
+              <Button 
+                type="submit" 
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Save Expense
+                  </>
+                )}
+              </Button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* Filter & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
-        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm">
-          <Search size={18} />
-          <input
-            type="text"
-            placeholder="Search expenses..."
-            className="px-2 py-1 outline-none w-full"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border rounded-xl shadow-sm"
-        >
-          <option value="ALL">All Statuses</option>
-          <option value="APPROVED">Approved</option>
-          <option value="PENDING">Pending</option>
-          <option value="REJECTED">Rejected</option>
-        </select>
-      </div>
-
-      {/* Expenditures Table */}
-      <div className="overflow-x-auto bg-white rounded-2xl shadow-lg border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-100">
-            <tr>
-              {["Voucher","Description","Category","Amount","Date","Payment Method","Status","Actions"].map((h) => (
-                <th key={h} className="px-6 py-3 text-left text-sm font-medium text-gray-700">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredExpenditures.map((exp, i) => (
-              <tr key={exp.id} className={`transition hover:bg-gray-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                <td className="px-6 py-4">{exp.voucherNumber}</td>
-                <td className="px-6 py-4">{exp.description}</td>
-                <td className="px-6 py-4">{categories.find((c) => c.code === exp.expenditureHeadCode)?.name || exp.expenditureHeadCode}</td>
-                <td className="px-6 py-4">{exp.amount?.toFixed(2)} {exp.currencyCode}</td>
-                <td className="px-6 py-4">{exp.expenseDate ? format(new Date(exp.expenseDate), "yyyy-MM-dd") : ""}</td>
-                <td className="px-6 py-4">{paymentMethods.find((pm) => pm.id === exp.paymentMethodId)?.name || ""}</td>
-                <td className="px-6 py-4"><StatusBadge status={exp.approvalStatus || ""} /></td>
-                <td className="px-6 py-4 flex gap-2 justify-end">
-                  <button onClick={() => handleEdit(exp)} className="text-blue-600 hover:text-blue-800 transition"><Edit size={18} /></button>
-                  <button onClick={() => handleDelete(exp.id)} className="text-red-600 hover:text-red-800 transition"><Trash2 size={18} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-100 font-semibold">
-              <td colSpan={3} className="px-6 py-3 text-left">Total</td>
-              <td className="px-6 py-3">{totalAmount.toFixed(2)}</td>
-              <td colSpan={4}></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  );
-};
-
-export default ExpenditurePage;
+  )
+}

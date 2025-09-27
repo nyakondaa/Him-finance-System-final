@@ -1,4 +1,3 @@
-// src/App.jsx
 import * as React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -36,7 +35,8 @@ export default function App() {
                         <Route index element={<DashboardPage showModal={showModal} />} />
                         <Route path="users" element={<UserManagementPage showModal={showModal} />} />
                         <Route path="members" element={<MembersPage  />} />
-                        <Route path="expenses" element={<ExpensesPage showModal={showModal} />} />
+                        {/* The ExpensesPage no longer requires showModal as the table and modal logic were removed. */}
+                        <Route path="expenses" element={<ExpensesPage />} />
                         <Route path="revenue-heads" element={<RevenueHeadsPage showModal={showModal} />} />
                         <Route path="expenditure-heads" element={<ExpenditureHeadsPage showModal={showModal} />} />
                         <Route path="transactions" element={<TransactionsPage  />} />
