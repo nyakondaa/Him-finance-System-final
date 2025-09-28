@@ -48,6 +48,9 @@ const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
   const headerTitle = isIncome
     ? "Transactions (Credit/Inflow)"
     : "Expenditures (Debit/Outflow)";
+  const description = isIncome
+    ? "Memmber Name"
+    : "Description ";
 
   // Safely format credit and debit balances
   const creditBalance = account.creditBalance || 0;
@@ -129,7 +132,7 @@ const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                       Reference
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">
-                      Description
+                      {description}
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                       Amount
@@ -149,6 +152,9 @@ const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                       const reference = transaction.receiptNumber || "N/A";
                       const notes =
                         transaction.notes || "No description provided";
+                       const MemmberName = transaction.member
+                        ? `${transaction.member.firstName} ${transaction.member.lastName}`
+                        : "Unknown Member";
                       const amount = parseFloat(transaction.amount) || 0;
 
                       return (
@@ -163,7 +169,7 @@ const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                             {reference}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {notes}
+                            {isIncome ? MemmberName : notes}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-green-600 font-medium">
                             {formatCurrency(amount)}
