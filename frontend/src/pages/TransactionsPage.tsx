@@ -6,11 +6,23 @@ import {
   getRevenueHeads,
   getTransactions,
 } from "@/services/api";
-import type { Account, Transaction, Expenditure, RevenueHead, ExpenditureHead } from "@/utils/Types";
+import type {
+  Account,
+  Transaction,
+  Expenditure,
+  RevenueHead,
+  ExpenditureHead,
+} from "@/utils/Types";
+
+import AccountDetailModal from "@/components/ledger";
 
 // --- Constants ---
-const ACCOUNT_TYPES = ["All Accounts", "Income Accounts", "Expense Accounts"] as const;
-type AccountType = typeof ACCOUNT_TYPES[number];
+const ACCOUNT_TYPES = [
+  "All Accounts",
+  "Income Accounts",
+  "Expense Accounts",
+] as const;
+type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 // --- Custom Hooks ---
 const useAccountsData = () => {
@@ -19,13 +31,20 @@ const useAccountsData = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [transactionsRes, revenueHeads, expendituresRes, expenditureHeadsRes] = await Promise.all([
+      const [
+        transactionsRes,
+        revenueHeads,
+        expendituresRes,
+        expenditureHeadsRes,
+      ] = await Promise.all([
         getTransactions(),
         getRevenueHeads(),
         getExpenditures({ limit: 100, offset: 0 }),
@@ -33,13 +52,20 @@ const useAccountsData = () => {
       ]);
 
       // Validate responses
-      if (!transactionsRes?.transactions || !revenueHeads || !expendituresRes?.expenditures || !expenditureHeadsRes) {
+      if (
+        !transactionsRes?.transactions ||
+        !revenueHeads ||
+        !expendituresRes?.expenditures ||
+        !expenditureHeadsRes
+      ) {
         throw new Error("Invalid API response structure");
       }
 
       // Merge transactions with revenue head names
       const mergedTransactions = transactionsRes.transactions.map((tx) => {
-        const head = revenueHeads.find((h: RevenueHead) => h.code === tx.revenueHeadCode);
+        const head = revenueHeads.find(
+          (h: RevenueHead) => h.code === tx.revenueHeadCode
+        );
         return {
           ...tx,
           revenueHeadName: head?.name || "Unknown",
@@ -47,67 +73,77 @@ const useAccountsData = () => {
       });
 
       // Merge expenditures with expenditure head names
-      const mergedExpenditures = expendituresRes.expenditures.map((exp: Expenditure) => {
-        const head = expenditureHeadsRes.find((h: ExpenditureHead) => h.code === exp.expenditureHeadCode);
-        return {
-          ...exp,
-          expenditureHeadName: head?.name || "Unknown",
-        };
-      });
+      const mergedExpenditures = expendituresRes.expenditures.map(
+        (exp: Expenditure) => {
+          const head = expenditureHeadsRes.find(
+            (h: ExpenditureHead) => h.code === exp.expenditureHeadCode
+          );
+          return {
+            ...exp,
+            expenditureHeadName: head?.name || "Unknown",
+          };
+        }
+      );
 
       // Create income accounts from revenue heads
-      const incomeAccounts: Account[] = revenueHeads.map((head: RevenueHead) => {
-        const accountTransactions = mergedTransactions.filter(
-          (tx) => tx.revenueHeadCode === head.code
-        );
+      const incomeAccounts: Account[] = revenueHeads.map(
+        (head: RevenueHead) => {
+          const accountTransactions = mergedTransactions.filter(
+            (tx) => tx.revenueHeadCode === head.code
+          );
 
-        const balance = accountTransactions.reduce(
-          (sum, tx) => sum + (parseFloat(tx.amount) || 0),
-          0
-        );
+          const balance = accountTransactions.reduce(
+            (sum, tx) => sum + (parseFloat(tx.amount) || 0),
+            0
+          );
 
-        return {
-          id: `income-${head.code}`,
-          accountName: head.name,
-          balance,
-          debitBalance: balance,
-          creditBalance: undefined,
-          transactions: accountTransactions,
-          type: 'income' as const,
-        };
-      });
+          return {
+            id: `income-${head.code}`,
+            accountName: head.name,
+            balance,
+            debitBalance: balance,
+            creditBalance: undefined,
+            transactions: accountTransactions,
+            type: "income" as const,
+          };
+        }
+      );
 
       // Create expense accounts from expenditure heads
-      const expenseAccounts: Account[] = expenditureHeadsRes.map((head: ExpenditureHead) => {
-        const accountExpenditures = mergedExpenditures.filter(
-          (exp) => exp.expenditureHeadCode === head.code
-        );
+      const expenseAccounts: Account[] = expenditureHeadsRes.map(
+        (head: ExpenditureHead) => {
+          const accountExpenditures = mergedExpenditures.filter(
+            (exp) => exp.expenditureHeadCode === head.code
+          );
 
-        const balance = accountExpenditures.reduce(
-          (sum, exp) => sum + (parseFloat(exp.totalAmount ?? exp.amount) || 0),
-          0
-        );
+          const balance = accountExpenditures.reduce(
+            (sum, exp) =>
+              sum + (parseFloat(exp.totalAmount ?? exp.amount) || 0),
+            0
+          );
 
-        return {
-          id: `expense-${head.code}`,
-          accountName: head.name,
-          balance: -balance, // Negative balance for expenses
-          debitBalance: undefined,
-          creditBalance: balance,
-          expenditures: accountExpenditures,
-          type: 'expense' as const,
-        };
-      });
+          return {
+            id: `expense-${head.code}`,
+            accountName: head.name,
+            balance: -balance, // Negative balance for expenses
+            debitBalance: undefined,
+            creditBalance: balance,
+            expenditures: accountExpenditures,
+            type: "expense" as const,
+          };
+        }
+      );
 
       const allAccounts = [...incomeAccounts, ...expenseAccounts];
 
       setAccounts(allAccounts);
       setExpenditures(mergedExpenditures);
       setTransactions(mergedTransactions);
-
     } catch (err) {
       console.error("Error fetching accounts data:", err);
-      setError(err instanceof Error ? err.message : "An unknown error occurred");
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred"
+      );
     } finally {
       setLoading(false);
     }
@@ -117,8 +153,16 @@ const useAccountsData = () => {
     fetchData();
   }, [fetchData]);
 
-  return { accounts, expenditures, transactions, loading, error, refetch: fetchData };
+  return {
+    accounts,
+    expenditures,
+    transactions,
+    loading,
+    error,
+    refetch: fetchData,
+  };
 };
+
 
 // --- Helper Functions ---
 const formatCurrency = (amount: number): string => {
@@ -143,10 +187,15 @@ const LoadingState: React.FC = () => (
   </div>
 );
 
-const ErrorState: React.FC<{ error: string; onRetry: () => void }> = ({ error, onRetry }) => (
+const ErrorState: React.FC<{ error: string; onRetry: () => void }> = ({
+  error,
+  onRetry,
+}) => (
   <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
     <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-    <h3 className="text-lg font-semibold text-red-800 mb-2">Error Loading Accounts</h3>
+    <h3 className="text-lg font-semibold text-red-800 mb-2">
+      Error Loading Accounts
+    </h3>
     <p className="text-red-600 mb-4">{error}</p>
     <button
       onClick={onRetry}
@@ -202,6 +251,18 @@ export default function AccountsPage() {
   const [activeTab, setActiveTab] = useState<AccountType>("All Accounts");
   const [searchTerm, setSearchTerm] = useState("");
   const { accounts, loading, error, refetch } = useAccountsData();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+
+  const handleViewDetails = (account: Account) => {
+    setSelectedAccount(account);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedAccount(null);
+};
 
   // Filter accounts based on active tab and search term
   const filteredAccounts = useMemo(() => {
@@ -209,15 +270,15 @@ export default function AccountsPage() {
 
     // Filter by account type
     if (activeTab === "Income Accounts") {
-      filtered = filtered.filter(account => account.type === 'income');
+      filtered = filtered.filter((account) => account.type === "income");
     } else if (activeTab === "Expense Accounts") {
-      filtered = filtered.filter(account => account.type === 'expense');
+      filtered = filtered.filter((account) => account.type === "expense");
     }
 
     // Filter by search term
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(account =>
+      filtered = filtered.filter((account) =>
         account.accountName.toLowerCase().includes(term)
       );
     }
@@ -229,12 +290,11 @@ export default function AccountsPage() {
   if (error) return <ErrorState error={error} onRetry={refetch} />;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 ">
       <div className="max-w-6xl mx-auto">
         {/* Header and Action Button */}
         <header className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-extrabold text-gray-900">Accounts</h1>
-         
         </header>
 
         <AccountTabs activeTab={activeTab} onTabChange={setActiveTab} />
@@ -245,7 +305,9 @@ export default function AccountsPage() {
         <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
           {filteredAccounts.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              {searchTerm ? "No accounts match your search." : "No accounts found."}
+              {searchTerm
+                ? "No accounts match your search."
+                : "No accounts found."}
             </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200">
@@ -291,7 +353,7 @@ export default function AccountsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                       <button
-                        onClick={() => console.log(`Viewing details for ${account.accountName}`)}
+                        onClick={() => handleViewDetails(account)}
                         className="text-blue-600 hover:text-blue-800 flex items-center justify-center transition duration-150"
                       >
                         <Eye className="w-4 h-4 mr-1" />
@@ -314,7 +376,9 @@ export default function AccountsPage() {
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="text-sm text-gray-500">Total Balance</div>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(filteredAccounts.reduce((sum, acc) => sum + acc.balance, 0))}
+              {formatCurrency(
+                filteredAccounts.reduce((sum, acc) => sum + acc.balance, 0)
+              )}
             </div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
@@ -322,6 +386,12 @@ export default function AccountsPage() {
             <div className="text-2xl font-bold text-blue-600">{activeTab}</div>
           </div>
         </div>
+
+        <AccountDetailModal
+          account={selectedAccount}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+        />
       </div>
     </div>
   );
