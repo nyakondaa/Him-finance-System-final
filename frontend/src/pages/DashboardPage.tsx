@@ -1,1453 +1,576 @@
-import { useState, useMemo, useEffect, useCallback, memo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useEffect, useMemo } from "react";
+import { getTransactions } from "@/services/api"; // Adjust the import path as necessary
 import {
-  TrendingUp,
-  DollarSign,
-  Users,
-  Building,
-  CreditCard,
-  Target,
-  Activity,
-  Award,
-  BarChart3,
+  Search,
+  Bell,
   ArrowUpRight,
-  ArrowDownRight,
-  RefreshCw,
+  Menu,
   Wallet,
-  Receipt,
-  Star,
-  Crown,
-  Flame,
-  Square,
-  CheckSquare,
+  Landmark,
+  ChevronDown,
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  Settings2,
 } from "lucide-react";
-import { Suspense } from "react";
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart as RechartsPie,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-} from "recharts";
 
-// Lazy load chart components (unused for now but available for future use)
-// const LineChart = lazy(() => import("recharts").then(module => ({ default: module.LineChart })));
-// const Line = lazy(() => import("recharts").then(module => ({ default: module.Line })));
-// const RadialBarChart = lazy(() => import("recharts").then(module => ({ default: module.RadialBarChart })));
-// const RadialBar = lazy(() => import("recharts").then(module => ({ default: module.RadialBar })));
-import {
-  getTransactions,
-  getUsers,
-  getBranches,
-  getRevenueHeads,
-  getCurrencies,
-  getPaymentMethods,
-} from "../services/api";
-import useAuth from "../hooks/useAuth";
+// --- MOCK TYPE DEFINITION (Replaces '@/utils/Types' for self-containment) ---
+// This defines the expected structure of a transaction item.
+// Your actual Transaction type should be more precise.
+/**
+ * @typedef {Object} Transaction
+ * @property {string} date - Date and time of the transaction.
+ * @property {number} amount - Amount of the transaction (negative for expense, positive for income).
+ * @property {string} name - Name of the payment recipient/source.
+ * @property {string} method - Payment method used.
+ * @property {string} category - Category of the transaction.
+ * @property {string} color - Color code for visual representation.
+ */
 
-// Debounce hook for performance optimization
-const useDebounce = (value: any, delay: number) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-};
-
-// Helper functions for styling and formatting (moved outside component for memoization)
-const getPerformanceColor = (change: number) => {
-  if (change > 10) return "text-green-600 bg-green-50";
-  if (change > 0) return "text-green-500 bg-green-50";
-  if (change < -10) return "text-red-600 bg-red-50";
-  if (change < 0) return "text-red-500 bg-red-50";
-  return "text-gray-600 bg-gray-50";
-};
-
-const getPerformanceIcon = (change: number) => {
-  if (change > 0) return <ArrowUpRight className="w-4 h-4" />;
-  if (change < 0) return <ArrowDownRight className="w-4 h-4" />;
-  return <Activity className="w-4 h-4" />;
-};
-
-const Dashboard = () => {
+// --- MOCK API FUNCTION (Replaces '@/services/api' for self-containment) ---
+// Simulates the async API call to fetch transactions
+const getTransactionsData = async ({ limit, offset }) => {
   
-  const [selectedPeriod, setSelectedPeriod] = useState("today");
-  const [selectedCurrency, setSelectedCurrency] = useState("USD");
-  const [isDefaultCurrency, setIsDefaultCurrency] = useState(false);
-
-  // Debounce period and currency changes to reduce re-renders
-  const debouncedPeriod = useDebounce(selectedPeriod, 300);
-  const debouncedCurrency = useDebounce(selectedCurrency, 300);
-
  
+  const response = await getTransactions({ limit, offset });
 
-  // Load default currency from local storage on component mount
+  
+  const transactionsData = response.transactions;
+
+
+  const sliced = transactionsData.slice(offset, offset + limit);
+  console.log("Mock API - Fetched transactions:", sliced);
+
+  return { data: { transactions: sliced } };
+};
+
+// --- MOCK DATA STRUCTURE (Now defined without transactions) ---
+const MOCK_DATA_STATIC = {
+  // 1. Summary Cards Data
+  summary: [
+    {
+      title: "Total Balance",
+      value: 15700.0,
+      change: 12.1,
+      isPositive: true,
+      icon: Wallet,
+    },
+    {
+      title: "Income",
+      value: 8500.0,
+      change: 6.3,
+      isPositive: true,
+      icon: TrendingUp,
+    },
+    {
+      title: "Expense",
+      value: 6222.0,
+      change: 2.4,
+      isPositive: false,
+      icon: TrendingDown,
+    },
+    {
+      title: "Total Savings",
+      value: 32913.0,
+      change: 12.1,
+      isPositive: true,
+      icon: Landmark,
+    },
+  ],
+  // 3. Money Flow Chart Data
+  moneyFlow: {
+    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+    income: [4000, 3500, 8500, 4500, 6000, 5200, 8500],
+    expense: [2500, 2000, 6222, 3000, 3500, 2800, 6222],
+  },
+  // 4. Budget Data
+  budget: [
+    { category: "Cafe & Restaurants", amount: 1500, color: "#6366F1" },
+    { category: "Entertainment", amount: 800, color: "#34D399" },
+    { category: "Investments", amount: 1200, color: "#F97316" },
+    { category: "Food & Groceries", amount: 1000, color: "#F59E0B" },
+    { category: "Health & Beauty", amount: 700, color: "#EC4899" },
+    { category: "Traveling", amount: 300, color: "#10B981" },
+  ],
+  // 5. Saving Goals Data
+  savingsGoals: [
+    { name: "Macbook Pro", current: 1650, goal: 2500, color: "#3B82F6" },
+    { name: "New car", current: 5000, goal: 60000, color: "#8B5CF6" },
+    { name: "New house", current: 150, goal: 150000, color: "#EC4899" },
+  ],
+};
+
+/**
+ * Custom hook to manage all dashboard data fetching and state.
+ */
+const useDashboardData = () => {
+  // Initialize data state with static mock data and an empty array for transactions
+  const [data, setData] = useState({ ...MOCK_DATA_STATIC, transactions: [] });
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const savedDefaultCurrency = localStorage.getItem("defaultCurrency");
-    if (savedDefaultCurrency) {
-      setSelectedCurrency(savedDefaultCurrency);
-    }
-  }, []);
+    const fetchData = async () => {
+      try {
+        // 1. Fetch real transactions using the user's API function (or the mock)
+        // NOTE: In your actual Next.js environment, you would use:
+        // const response = await getTransactions({ limit: 5, offset: 0 });
+        const response = await getTransactionsData({ limit: 5, offset: 0 });
+        console.log("Fetched transactions:", response);
+      
 
-  // Save/remove default currency to local storage when checkbox changes
-  useEffect(() => {
-    if (isDefaultCurrency) {
-      localStorage.setItem("defaultCurrency", selectedCurrency);
-    } else {
-      localStorage.removeItem("defaultCurrency");
-    }
-  }, [isDefaultCurrency, selectedCurrency]);
+        // 2. Set the data state, merging the static mock data with the fetched transactions.
+        setData((prevData) => ({
+          ...prevData,
+          transactions:response.data.transactions || [],
+        }));
 
-  // Fetch all data with optimized configurations
-  const {
-    data: transactionsData,
-    isLoading: loadingTransactions,
-    isError: isErrorTransactions,
-    error: transactionsError,
-  } = useQuery({
-    queryKey: ["transactions"],
-    queryFn: getTransactions,
-    refetchInterval: 60000, // Reduced frequency from 30s to 60s
-    retry: 1, // Reduced retries
-    staleTime: 10 * 60 * 1000, // Increased stale time to 10 minutes
-    gcTime: 15 * 60 * 1000, // Cache for 15 minutes
-    refetchOnWindowFocus: false, // Disable refetch on window focus
-  });
-
-  const {
-    isLoading: loadingUsers,
-    isError: isErrorUsers,
-    error: usersError,
-  } = useQuery({
-    queryKey: ["users"],
-    queryFn: getUsers,
-    retry: 1,
-    staleTime: 15 * 60 * 1000, // Increased to 15 minutes
-    gcTime: 30 * 60 * 1000, // Cache for 30 minutes
-    refetchOnWindowFocus: false,
-  });
-
-  const {
-    data: branchesData,
-    isLoading: loadingBranches,
-    isError: isErrorBranches,
-    error: branchesError,
-  } = useQuery({
-    queryKey: ["branches"],
-    queryFn: getBranches,
-    retry: 1,
-    staleTime: 30 * 60 * 1000, // Increased to 30 minutes
-    gcTime: 60 * 60 * 1000, // Cache for 1 hour
-    refetchOnWindowFocus: false,
-  });
-
-  const {
-    isLoading: loadingRevenueHeads,
-    isError: isErrorRevenueHeads,
-    error: revenueHeadsError,
-  } = useQuery({
-    queryKey: ["revenueHeads"],
-    queryFn: getRevenueHeads,
-    retry: 1,
-    staleTime: 30 * 60 * 1000, // Increased to 30 minutes
-    gcTime: 60 * 60 * 1000, // Cache for 1 hour
-    refetchOnWindowFocus: false,
-  });
-
-
-const {userPermissions, isLoading: authLoading } = useAuth();
-const hasPermission = useCallback((resource: string, action: string) => {
-  return userPermissions && userPermissions[resource]?.includes(action);
-}, [userPermissions]);
-
-// The key change: add permissions to the queryKey
-const {
-    data: currenciesData,
-    isLoading: loadingCurrencies,
-    isError: isErrorCurrencies,
-    error: currenciesError,
-} = useQuery({
-    queryKey: ["currencies", userPermissions],
-    queryFn: getCurrencies,
-    // The enabled check is still necessary
-    enabled: hasPermission('currencies', 'read') && !authLoading,
-    retry: 1,
-    staleTime: 60 * 60 * 1000,
-    gcTime: 2 * 60 * 60 * 1000, // Cache for 2 hours
-    refetchOnWindowFocus: false,
-});
-
-  const {
-    data: paymentMethodsData,
-    isLoading: loadingPaymentMethods,
-    isError: isErrorPaymentMethods,
-    error: paymentMethodsError,
-  } = useQuery({
-    queryKey: ["paymentMethods"],
-    queryFn: getPaymentMethods,
-    retry: 1,
-    staleTime: 60 * 60 * 1000, // 1 hour cache for payment methods
-    gcTime: 2 * 60 * 60 * 1000, // Cache for 2 hours
-    refetchOnWindowFocus: false,
-  });
-
-  // Process data - All useMemo hooks should be unconditional
-  const transactions = useMemo(() => {
-    if (!transactionsData) return [];
-    const data = Array.isArray(transactionsData)
-      ? transactionsData
-      : (transactionsData as any).transactions || (transactionsData as any).data || [];
-    return data.map((t: any) => ({
-      ...t,
-      amount: parseFloat(t.amount) || 0,
-      transactionDate: new Date(t.transactionDate),
-    }));
-  }, [transactionsData]);
-
-  // const users = useMemo(() => {
-  //   if (!usersData) return [];
-  //   return Array.isArray(usersData)
-  //     ? usersData
-  //     : (usersData as any).users || (usersData as any).data || [];
-  // }, [usersData]);
-
-  const branches = useMemo(() => {
-    if (!branchesData) return [];
-    return Array.isArray(branchesData)
-      ? branchesData
-      : (branchesData as any).branches || (branchesData as any).data || [];
-  }, [branchesData]);
-
-  // const revenueHeads = useMemo(() => {
-  //   if (!revenueHeadsData) return [];
-  //   return Array.isArray(revenueHeadsData)
-  //     ? revenueHeadsData
-  //     : (revenueHeadsData as any).revenueHeads || (revenueHeadsData as any).data || [];
-  // }, [revenueHeadsData]);
-
-  const currencies = useMemo(() => {
-    if (!currenciesData) return [];
-    return Array.isArray(currenciesData)
-      ? currenciesData
-      : (currenciesData as any).currencies || (currenciesData as any).data || [];
-  }, [currenciesData]);
-
-  const paymentMethods = useMemo(() => {
-    if (!paymentMethodsData) return [];
-    return Array.isArray(paymentMethodsData)
-      ? paymentMethodsData
-      : (paymentMethodsData as any).paymentMethods || (paymentMethodsData as any).data || [];
-  }, [paymentMethodsData]);
-
-  // Get available currencies - this must be unconditional
-  const availableCurrencies = useMemo(() => {
-    if (currencies.length > 0) {
-      return currencies.map((c: any) => c.code).sort();
-    }
-
-    const currenciesSet = new Set(
-      transactions.map((t: any) => t.currency).filter(Boolean)
-    );
-    const sortedCurrencies = Array.from(currenciesSet).sort();
-    if (!sortedCurrencies.includes("USD")) {
-      sortedCurrencies.unshift("USD");
-    }
-    return sortedCurrencies;
-  }, [transactions, currencies]);
-
-  // Get date ranges for current and previous periods
-  const getDateRange = (period: string) => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
-
-    switch (period) {
-      case "today":
-        return { start: today, end: endOfToday };
-      case "yesterday":
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        return { start: yesterday, end: today };
-      case "week":
-        const weekStart = new Date(
-          today.getFullYear(),
-          today.getMonth(),
-          today.getDate() - today.getDay()
+        console.log(
+          "Transactions successfully fetched and merged into dashboard data."
         );
-        return { start: weekStart, end: endOfToday };
-      case "prevWeek":
-        const prevWeekStart = new Date(
-          today.getFullYear(),
-          today.getMonth(),
-          today.getDate() - today.getDay() - 7
-        );
-        const weekStart2 = new Date(
-          today.getFullYear(),
-          today.getMonth(),
-          today.getDate() - today.getDay()
-        );
-        return {
-          start: prevWeekStart,
-          end: new Date(weekStart2.getTime() - 1),
-        };
-      case "month":
-        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-        return { start: monthStart, end: endOfToday };
-      case "prevMonth":
-        const prevMonthStart = new Date(
-          today.getFullYear(),
-          today.getMonth() - 1,
-          1
-        );
-        const prevMonthEnd = new Date(
-          today.getFullYear(),
-          today.getMonth(),
-          0,
-          23,
-          59,
-          59,
-          999
-        );
-        return { start: prevMonthStart, end: prevMonthEnd };
-      default:
-        return { start: today, end: endOfToday };
-    }
-  };
-
-  const { start: currentStart, end: currentEnd } = getDateRange(debouncedPeriod);
-  const { start: prevStart, end: prevEnd } = getDateRange(
-    debouncedPeriod === "today"
-      ? "yesterday"
-      : debouncedPeriod === "week"
-      ? "prevWeek"
-      : debouncedPeriod === "month"
-      ? "prevMonth"
-      : "today"
-  );
-
-  // Filter transactions for the current and previous periods
-  const currentTransactions = useMemo(() => {
-    return transactions.filter(
-      (t: any) =>
-        t.currency === debouncedCurrency &&
-        t.transactionDate >= currentStart &&
-        t.transactionDate <= currentEnd
-    );
-  }, [transactions, debouncedCurrency, currentStart, currentEnd]);
-
-  const previousTransactions = useMemo(() => {
-    return transactions.filter(
-      (t: any) =>
-        t.currency === debouncedCurrency &&
-        t.transactionDate >= prevStart &&
-        t.transactionDate <= prevEnd
-    );
-  }, [transactions, debouncedCurrency, prevStart, prevEnd]);
-
-  // Calculate core metrics for the selected period
-  const metrics = useMemo(() => {
-    const currentRevenue = currentTransactions.reduce(
-      (sum: number, t: any) => sum + t.amount,
-      0
-    );
-    const previousRevenue = previousTransactions.reduce(
-      (sum: number, t: any) => sum + t.amount,
-      0
-    );
-    const revenueChange =
-      previousRevenue === 0
-        ? currentRevenue > 0
-          ? 100
-          : 0
-        : ((currentRevenue - previousRevenue) / previousRevenue) * 100;
-
-    const currentCount = currentTransactions.length;
-    const previousCount = previousTransactions.length;
-    const countChange =
-      previousCount === 0
-        ? currentCount > 0
-          ? 100
-          : 0
-        : ((currentCount - previousCount) / previousCount) * 100;
-
-    const avgTransaction = currentCount > 0 ? currentRevenue / currentCount : 0;
-    const prevAvgTransaction =
-      previousCount > 0 ? previousRevenue / previousCount : 0;
-    const avgChange =
-      prevAvgTransaction === 0
-        ? avgTransaction > 0
-          ? 100
-          : 0
-        : ((avgTransaction - prevAvgTransaction) / prevAvgTransaction) * 100;
-
-    const uniquePayersSet = new Set(
-      currentTransactions.map((t: any) => t.payerName).filter(Boolean)
-    );
-    const uniquePayers = uniquePayersSet.size;
-
-    const conversionRate = uniquePayers > 0 ? currentCount / uniquePayers : 0;
-
-    return {
-      totalRevenue: currentRevenue,
-      revenueChange,
-      totalTransactions: currentCount,
-      transactionChange: countChange,
-      averageTransaction: avgTransaction,
-      averageChange: avgChange,
-      uniquePayers,
-      conversionRate,
+      } catch (error) {
+        // Log the error but still render the dashboard with the static mock data
+        console.error("Error fetching transactions:", error);
+      } finally {
+        // Indicate loading is complete regardless of whether transactions succeeded
+        setLoading(false);
+      }
     };
-  }, [currentTransactions, previousTransactions]);
 
-  // Payment methods analysis
-  const paymentMethodsChartData = useMemo(() => {
-    const methods: any = {};
-    currentTransactions.forEach((t: any) => {
-      const method = t.paymentMethod || "Unknown";
-      if (!methods[method]) {
-        methods[method] = { name: method, value: 0, count: 0, color: "" };
-      }
-      methods[method].value += t.amount;
-      methods[method].count += 1;
-    });
+    fetchData();
+  }, []); // Empty dependency array ensures it runs once on mount
 
-    const colors = [
-      "#3B82F6",
-      "#10B981",
-      "#F59E0B",
-      "#EF4444",
-      "#8B5CF6",
-      "#06B6D4",
-      "#84CC16",
-      "#F97316",
-      "#6B7280",
-    ];
-    return Object.values(methods)
-      .map((method: any, index: number) => ({
-        ...method,
-        color: colors[index % colors.length],
-      }))
-      .sort((a: any, b: any) => b.value - a.value);
-  }, [currentTransactions]);
+  return { data, loading };
+};
 
-  // Hourly data for charts
-  const hourlyData = useMemo(() => {
-    const hours = Array.from({ length: 24 }, (_, i) => ({
-      hour: i,
-      hourLabel: `${i.toString().padStart(2, "0")}:00`,
-      revenue: 0,
-      transactions: 0,
-    }));
+// --- HELPER COMPONENTS (No changes needed here, they automatically use the transactions property from data) ---
 
-    currentTransactions.forEach((t: any) => {
-      const hour = t.transactionDate.getHours();
-      if (hours[hour]) {
-        hours[hour].revenue += t.amount;
-        hours[hour].transactions += 1;
-      }
-    });
+/**
+ * Card for displaying summary statistics (Balance, Income, Expense, Savings).
+ */
+const StatCard = ({ title, value, change, isPositive, Icon }) => {
+  const formattedValue = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  }).format(value);
 
-    return hours;
-  }, [currentTransactions]);
-
-  // Top 5 revenue heads for the current period (unused for now)
-  // const topRevenueHeads = useMemo(() => {
-  //   const revenueHeadTotals: any = {};
-  //   currentTransactions.forEach((t: any) => {
-  //     const revenueHeadCode = t.revenueHeadCode;
-  //     const amount = t.amount;
-  //     if (revenueHeadCode) {
-  //       revenueHeadTotals[revenueHeadCode] =
-  //         (revenueHeadTotals[revenueHeadCode] || 0) + amount;
-  //     }
-  //   });
-
-  //   const sortedRevenueHeads = Object.entries(revenueHeadTotals)
-  //     .map(([code, total]) => {
-  //       const head = revenueHeads.find((rh: any) => rh.code === code);
-  //       return {
-  //         name: head?.name || `Unknown Head (${code})`,
-  //         total: total,
-  //       };
-  //     })
-  //     .sort((a: any, b: any) => b.total - a.total)
-  //     .slice(0, 5);
-
-  //   return sortedRevenueHeads;
-  // }, [currentTransactions, revenueHeads]);
-
-  // Top 5 payers for the current period with transaction count
-  const topPayers = useMemo(() => {
-    const payerTotals: any = {};
-    const payerCounts: any = {};
-
-    currentTransactions.forEach((t: any) => {
-      const payerName = t.payerName || "Unknown Payer";
-      const amount = t.amount;
-      payerTotals[payerName] = (payerTotals[payerName] || 0) + amount;
-      payerCounts[payerName] = (payerCounts[payerName] || 0) + 1;
-    });
-
-    return Object.entries(payerTotals)
-      .map(([name, total]) => ({
-        name,
-        total,
-        count: payerCounts[name] || 0,
-      }))
-      .sort((a: any, b: any) => b.total - a.total)
-      .slice(0, 5);
-  }, [currentTransactions]);
-
-  // Transaction Value Distribution data for chart
-  const transactionValueDistributionData = useMemo(() => {
-    const bins = [
-      { name: `< ${debouncedCurrency} 50`, min: 0, max: 50, count: 0 },
-      { name: `${debouncedCurrency} 50 - 200`, min: 50, max: 200, count: 0 },
-      { name: `${debouncedCurrency} 200 - 500`, min: 200, max: 500, count: 0 },
-      { name: `${debouncedCurrency} 500 - 1000`, min: 500, max: 1000, count: 0 },
-      {
-        name: `> ${debouncedCurrency} 1000`,
-        min: 1000,
-        max: Infinity,
-        count: 0,
-      },
-    ];
-
-    currentTransactions.forEach((t: any) => {
-      const amount = t.amount;
-      for (let i = 0; i < bins.length; i++) {
-        if (amount >= bins[i].min && amount < bins[i].max) {
-          bins[i].count++;
-          break;
-        }
-      }
-    });
-
-    return bins.map((b) => ({ name: b.name, transactions: b.count }));
-  }, [currentTransactions, debouncedCurrency]);
-
-  // Branch Performance for the current period
-  const branchPerformanceData = useMemo(() => {
-    const branchTotals: any = {};
-    currentTransactions.forEach((t: any) => {
-      const branchCode = t.branchCode;
-      const amount = t.amount;
-      if (branchCode) {
-        branchTotals[branchCode] = (branchTotals[branchCode] || 0) + amount;
-      }
-    });
-
-    return branches
-      .map((branch: any) => ({
-        name: branch.name || `Unknown Branch (${branch.code})`,
-        total: branchTotals[branch.code] || 0,
-      }))
-      .sort((a: any, b: any) => b.total - a.total);
-  }, [currentTransactions, branches]);
-
-
-  const formatCurrency = useCallback((amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: debouncedCurrency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  }, [debouncedCurrency]);
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
-    if (num >= 1000) return (num / 1000).toFixed(1) + "K";
-    return num.toString();
-  };
-
-  // Overall loading and error state
-  if (
-    loadingTransactions ||
-    loadingUsers ||
-    loadingBranches ||
-    loadingRevenueHeads ||
-    loadingCurrencies ||
-    loadingPaymentMethods
-  ) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xl font-semibold text-gray-700">
-            Loading Dashboard...
-          </p>
-          <p className="text-gray-500 mt-2">Fetching your latest data</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (
-    isErrorTransactions ||
-    isErrorUsers ||
-    isErrorBranches ||
-    isErrorRevenueHeads ||
-    isErrorCurrencies ||
-    isErrorPaymentMethods
-  ) {
-    return (
-      <div className="text-center text-red-600 p-8">
-        <h2 className="text-xl font-semibold mb-4">
-          Error Loading Dashboard Data
-        </h2>
-        <div className="space-y-2">
-          {isErrorTransactions && (
-            <p className="text-sm">
-              Transactions: {transactionsError?.message || "Unknown error"}
-            </p>
-          )}
-          {isErrorUsers && (
-            <p className="text-sm">
-              Users: {usersError?.message || "Unknown error"}
-            </p>
-          )}
-          {isErrorBranches && (
-            <p className="text-sm">
-              Branches: {branchesError?.message || "Unknown error"}
-            </p>
-          )}
-          {isErrorRevenueHeads && (
-            <p className="text-sm">
-              Revenue Heads: {revenueHeadsError?.message || "Unknown error"}
-            </p>
-          )}
-          {isErrorCurrencies && (
-            <p className="text-sm">
-              Currencies: {currenciesError?.message || "Unknown error"}
-            </p>
-          )}
-          {isErrorPaymentMethods && (
-            <p className="text-sm">
-              Payment Methods: {paymentMethodsError?.message || "Unknown error"}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  const changeClass = isPositive
+    ? "text-green-500 bg-green-500/10"
+    : "text-red-500 bg-red-500/10";
+  const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left side */}
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-                  <BarChart3 className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                    Revenue Command Center
-                  </h1>
-                  <p className="text-sm text-gray-500">
-                    Real-time business intelligence
-                  </p>
-                </div>
-              </div>
-            </div>
+    <div className="p-5 bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col justify-between h-full">
+      <div className="flex justify-between items-start mb-2">
+        <h3 className="text-sm font-medium text-gray-500">{title}</h3>
+        <ArrowUpRight className="w-5 h-5 text-gray-400" />
+      </div>
+      <div className="text-3xl font-bold text-gray-900 mb-1">
+        {formattedValue.slice(0, -3)}
+        <span className="text-xl font-normal text-gray-600">
+          {formattedValue.slice(-3)}
+        </span>
+      </div>
+      <div className="flex items-center text-sm">
+        <div
+          className={`flex items-center px-2 py-0.5 rounded-full mr-2 ${changeClass}`}
+        >
+          <ChangeIcon className="w-3 h-3 mr-1" />
+          <span>{change}%</span>
+        </div>
+        <span className="text-gray-500">vs last month</span>
+      </div>
+    </div>
+  );
+};
 
-            {/* Controls */}
-            <div className="flex items-center space-x-4">
-              {/* Period Selector */}
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                {["today", "week", "month"].map((period) => (
-                  <button
-                    key={period}
-                    onClick={() => setSelectedPeriod(period)}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                      selectedPeriod === period
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    {period.charAt(0).toUpperCase() + period.slice(1)}
-                  </button>
-                ))}
-              </div>
+/**
+ * Placeholder for the Money Flow Bar/Line Chart.
+ * In a real app, this would be a library like Recharts or Victory.
+ */
+const MoneyFlowChartPlaceholder = ({ data }) => {
+  if (!data) return null;
 
-              {/* Currency Selector */}
-              <select
-                value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value)}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {availableCurrencies.map((currency: string) => (
-                  <option key={currency} value={currency}>
-                    {currency}
-                  </option>
-                ))}
-              </select>
+  const maxVal = Math.max(...data.income, ...data.expense);
+  const scale = (val) => (val / maxVal) * 100;
 
-              {/* Default Currency Checkbox */}
-              <label className="flex items-center cursor-pointer text-gray-700 text-sm sm:text-base">
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={isDefaultCurrency}
-                  onChange={(e) => setIsDefaultCurrency(e.target.checked)}
-                />
-                <span className="w-5 h-5 sm:w-6 h-6 border-2 border-gray-400 rounded-md flex items-center justify-center mr-2 transition-all duration-200 ease-in-out flex-shrink-0">
-                  {isDefaultCurrency ? (
-                    <CheckSquare className="w-4 h-4 sm:w-5 h-5 text-blue-600" />
-                  ) : (
-                    <Square className="w-4 h-4 sm:w-5 h-5 text-gray-400" />
-                  )}
-                </span>
-                Default
-              </label>
-
-              {/* Refresh Button */}
-              <button
-                className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  window.location.reload();
-                }}
-              >
-                <RefreshCw className="w-4 h-4 text-gray-600" />
-              </button>
-            </div>
-          </div>
+  return (
+    <div className="h-full flex flex-col p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">Money flow</h2>
+        <div className="flex space-x-4 text-sm font-medium">
+          <span className="flex items-center text-indigo-600">
+            <span className="w-2 h-2 rounded-full bg-indigo-600 mr-1"></span>{" "}
+            Income
+          </span>
+          <span className="flex items-center text-red-500">
+            <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>{" "}
+            Expense
+          </span>
+          <button className="flex items-center text-gray-600 bg-gray-100 px-3 py-1 rounded-lg">
+            All accounts <ChevronDown className="w-4 h-4 ml-1" />
+          </button>
+          <button className="flex items-center text-gray-600 bg-gray-100 px-3 py-1 rounded-lg">
+            This year <ChevronDown className="w-4 h-4 ml-1" />
+          </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Key Performance Indicators */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total Revenue */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl">
-                <DollarSign className="w-6 h-6 text-white" />
-              </div>
-              <div
-                className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${getPerformanceColor(
-                  metrics.revenueChange
-                )}`}
-              >
-                {getPerformanceIcon(metrics.revenueChange)}
-                <span>{metrics.revenueChange.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">
-                Total Revenue (
-                {selectedPeriod === "today"
-                  ? "Today"
-                  : selectedPeriod === "week"
-                  ? "This Week"
-                  : "This Month"}
-                )
-              </p>
-              <p className="text-3xl font-bold text-gray-900">
-                {formatCurrency(metrics.totalRevenue)}
-              </p>
-              <p className="text-xs text-gray-500">
-                {selectedPeriod === "today"
-                  ? "vs yesterday"
-                  : `vs previous ${selectedPeriod}`}
-              </p>
-            </div>
-          </div>
-
-          {/* Transactions */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-green-500 to-green-600 rounded-xl">
-                <Receipt className="w-6 h-6 text-white" />
-              </div>
-              <div
-                className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${getPerformanceColor(
-                  metrics.transactionChange
-                )}`}
-              >
-                {getPerformanceIcon(metrics.transactionChange)}
-                <span>{metrics.transactionChange.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">
-                Transactions (
-                {selectedPeriod === "today"
-                  ? "Today"
-                  : selectedPeriod === "week"
-                  ? "This Week"
-                  : "This Month"}
-                )
-              </p>
-              <p className="text-3xl font-bold text-gray-900">
-                {formatNumber(metrics.totalTransactions)}
-              </p>
-              <p className="text-xs text-gray-500">Payment processed</p>
-            </div>
-          </div>
-
-          {/* Average Transaction */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl">
-                <Target className="w-6 h-6 text-white" />
-              </div>
-              <div
-                className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${getPerformanceColor(
-                  metrics.averageChange
-                )}`}
-              >
-                {getPerformanceIcon(metrics.averageChange)}
-                <span>{metrics.averageChange.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">
-                Avg. Transaction (
-                {selectedPeriod === "today"
-                  ? "Today"
-                  : selectedPeriod === "week"
-                  ? "This Week"
-                  : "This Month"}
-                )
-              </p>
-              <p className="text-3xl font-bold text-gray-900">
-                {formatCurrency(metrics.averageTransaction)}
-              </p>
-              <p className="text-xs text-gray-500">Per transaction value</p>
-            </div>
-          </div>
-
-          {/* Unique Payers */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl">
-                <Users className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-600">
-                <Crown className="w-3 h-3" />
-                <span>{metrics.conversionRate.toFixed(1)}x</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">
-                Unique Payers (
-                {selectedPeriod === "today"
-                  ? "Today"
-                  : selectedPeriod === "week"
-                  ? "This Week"
-                  : "This Month"}
-                )
-              </p>
-              <p className="text-3xl font-bold text-gray-900">
-                {formatNumber(metrics.uniquePayers)}
-              </p>
-              <p className="text-xs text-gray-500">Customer engagement</p>
-            </div>
-          </div>
+      <div className="flex-grow flex items-end relative pt-4">
+        {/* Placeholder for the $10,000 reference line/label */}
+        <div className="absolute top-1/4 left-0 right-0 border-t border-dashed border-gray-300"></div>
+        <div className="absolute top-[calc(25%-10px)] left-[18%] px-2 py-1 bg-gray-800 text-white text-xs rounded-lg shadow-md">
+          $10,000
         </div>
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Revenue Timeline */}
-          <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  Revenue Timeline (
-                  {selectedPeriod === "today" ? "Hourly" : "Daily"})
-                </h3>
-                <p className="text-sm text-gray-500">Performance breakdown</p>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
-                <Activity className="w-4 h-4" />
-                <span>Live Data</span>
-              </div>
-            </div>
-            <div className="h-80">
-              <Suspense fallback={<div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={hourlyData}>
-                    <defs>
-                      <linearGradient
-                        id="revenueGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                        <stop
-                          offset="95%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0.05}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis
-                      dataKey="hourLabel"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fill: "#64748b" }}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fill: "#64748b" }}
-                      tickFormatter={(value) => formatNumber(value)}
-                    />
-                    <Tooltip
-                    formatter={(value: any, name: any) => [
-                      formatCurrency(value),
-                      "Revenue",
-                    ]}
-                      labelStyle={{ color: "#1f2937" }}
-                      contentStyle={{
-                        backgroundColor: "white",
-                        border: "none",
-                        borderRadius: "12px",
-                        boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#3B82F6"
-                      strokeWidth={3}
-                      fill="url(#revenueGradient)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Suspense>
-            </div>
-          </div>
+        {data.labels.map((label, index) => {
+          const incomeHeight = scale(data.income[index]);
+          const expenseHeight = scale(data.expense[index]);
 
-          {/* Payment Methods */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  Payment Mix (
-                  {selectedPeriod === "today"
-                    ? "Today"
-                    : selectedPeriod === "week"
-                    ? "This Week"
-                    : "This Month"}
-                  )
-                </h3>
-                <p className="text-sm text-gray-500">
-                  Method distribution by value
-                </p>
-              </div>
-              <Wallet className="w-5 h-5 text-gray-400" />
-            </div>
-
-            <div className="h-48 mx-auto">
-              <Suspense fallback={<div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPie>
-                    <Pie
-                      data={paymentMethodsChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={75}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {paymentMethodsChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: any) => [formatCurrency(value), "Amount"]}
-                    />
-                  </RechartsPie>
-                </ResponsiveContainer>
-              </Suspense>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              {paymentMethodsChartData.slice(0, 4).map((method) => (
+          return (
+            <div key={label} className="flex flex-col items-center w-1/7">
+              {/* Stacked Bars - Simplified for visual representation */}
+              <div className="flex flex-col justify-end w-4 h-40 relative">
                 <div
-                  key={method.name}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: method.color }}
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      {method.name}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gray-900">
-                      {formatCurrency(method.value)}
-                    </p>
-                    <p className="text-xs text-gray-500">{method.count} txns</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Top Performers (Payers) */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  Top Payers (
-                  {selectedPeriod === "today"
-                    ? "Today"
-                    : selectedPeriod === "week"
-                    ? "This Week"
-                    : "This Month"}
-                  )
-                </h3>
-                <p className="text-sm text-gray-500">
-                  Revenue leaders by customer
-                </p>
-              </div>
-              <Star className="w-5 h-5 text-yellow-500" />
-            </div>
-
-            <div className="space-y-4">
-              {topPayers.length > 0 ? (
-                topPayers.map((payer, index) => (
-                  <div
-                    key={payer.name}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold text-white ${
-                          index === 0
-                            ? "bg-yellow-500"
-                            : index === 1
-                            ? "bg-gray-400"
-                            : index === 2
-                            ? "bg-orange-500"
-                            : "bg-blue-500"
-                        }`}
-                      >
-                        {index + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">
-                          {payer.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {payer.count} transactions
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900">
-                        {formatCurrency(payer.total as number)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Avg: {formatCurrency((payer.total as number) / payer.count)}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-4 text-sm">
-                  No top payers for this period.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  Live Activity
-                </h3>
-                <p className="text-sm text-gray-500">Recent transactions</p>
-              </div>
-              <div className="flex items-center space-x-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Live</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {currentTransactions
-                .slice(-5)
-                .reverse()
-                .map((transaction: any) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Receipt className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">
-                          {transaction.payerName || "Unknown Payer"}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {transaction.transactionDate.toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900">
-                        {formatCurrency(transaction.amount)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {transaction.paymentMethod || "Unknown Method"}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              {currentTransactions.length === 0 && (
-                <p className="text-gray-500 text-center py-4 text-sm">
-                  No recent transactions for this period.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Currencies and Payment Methods */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  Currencies & Methods
-                </h3>
-                <p className="text-sm text-gray-500">
-                  Supported payment options
-                </p>
-              </div>
-              <CreditCard className="w-5 h-5 text-gray-400" />
-            </div>
-
-            <div className="space-y-4">
-              <div className="p-3 bg-blue-50 rounded-xl">
-                <h4 className="font-medium text-gray-900 mb-2 text-sm">
-                  Active Currencies
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {availableCurrencies.map((currency: string) => (
-                    <span
-                      key={currency}
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        currency === selectedCurrency
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {currency}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-3 bg-purple-50 rounded-xl">
-                <h4 className="font-medium text-gray-900 mb-2 text-sm">
-                  Payment Methods
-                </h4>
-                <div className="space-y-2">
-                  {paymentMethods.length > 0 ? (
-                    paymentMethods.slice(0, 5).map((method: any) => (
-                      <div
-                        key={method.id || method.name}
-                        className="flex items-center justify-between"
-                      >
-                        <span className="text-sm text-gray-700">
-                          {method.name}
-                        </span>
-                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                          {method.type || "N/A"}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-sm">
-                      No payment methods configured.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Performance Summary */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="p-3 bg-white/20 rounded-xl inline-block mb-3">
-                <TrendingUp className="w-8 h-8" />
-              </div>
-              <p className="text-white/80 text-sm mb-1">Revenue Growth</p>
-              <p className="text-3xl font-bold">
-                {metrics.revenueChange > 0 ? "+" : ""}
-                {metrics.revenueChange.toFixed(1)}%
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="p-3 bg-white/20 rounded-xl inline-block mb-3">
-                <Award className="w-8 h-8" />
-              </div>
-              <p className="text-white/80 text-sm mb-1">
-                Transaction Success Rate
-              </p>
-              <p className="text-3xl font-bold">100%</p>
-            </div>
-
-            <div className="text-center">
-              <div className="p-3 bg-white/20 rounded-xl inline-block mb-3">
-                <Flame className="w-8 h-8" />
-              </div>
-              <p className="text-white/80 text-sm mb-1">
-                Peak Hour (
-                {selectedPeriod === "today"
-                  ? "Today"
-                  : selectedPeriod === "week"
-                  ? "This Week"
-                  : "This Month"}
-                )
-              </p>
-              <p className="text-3xl font-bold">
-                {hourlyData.reduce(
-                  (max, curr) => (curr.revenue > max.revenue ? curr : max),
-                  hourlyData[0]
-                )?.hourLabel || "--:--"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Transaction Value Distribution Chart */}
-        <div className="mt-6 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-gray-600" /> Transaction Value
-            Distribution ({selectedCurrency},{" "}
-            {selectedPeriod === "today"
-              ? "Today"
-              : selectedPeriod === "week"
-              ? "This Week"
-              : "This Month"}
-            )
-          </h3>
-          <div className="h-64">
-            <Suspense fallback={<div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div></div>}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={transactionValueDistributionData}
-                  margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                  <XAxis
-                    dataKey="name"
-                    tickLine={false}
-                    axisLine={false}
-                    style={{ fontSize: "12px" }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    style={{ fontSize: "12px" }}
-                  />
-                  <Tooltip formatter={(value) => [value, "Transactions"]} />
-                  <Bar
-                    dataKey="transactions"
-                    fill="#8884d8"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </Suspense>
-          </div>
-        </div>
-
-        {/* Payment Methods Distribution */}
-        <div className="mt-6 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4 text-gray-700">
-            Payment Methods Distribution ({selectedCurrency},{" "}
-            {selectedPeriod === "today"
-              ? "Today"
-              : selectedPeriod === "week"
-              ? "This Week"
-              : "This Month"}
-            )
-          </h3>
-          <div className="space-y-4">
-            {paymentMethodsChartData.length > 0 ? (
-              paymentMethodsChartData.map((method) => {
-                const percentage =
-                  metrics.totalRevenue > 0
-                    ? (method.value / metrics.totalRevenue) * 100
-                    : 0;
-                return (
-                  <div key={method.name} className="space-y-1.5">
-                    <div className="flex justify-between text-sm text-gray-700">
-                      <span>{method.name}</span>
-                      <span className="font-semibold">
-                        {formatCurrency(method.value)} ({percentage.toFixed(1)}
-                        %)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-gray-500 text-center py-4 text-sm">
-                No payment method data for this period.
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Branch Performance */}
-        <div className="mt-6 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4 text-gray-700">
-            Branch Performance ({selectedCurrency},{" "}
-            {selectedPeriod === "today"
-              ? "Today"
-              : selectedPeriod === "week"
-              ? "This Week"
-              : "This Month"}
-            )
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {branchPerformanceData.length > 0 ? (
-              branchPerformanceData.map((branch: any) => (
+                  className="w-4 bg-red-400 absolute bottom-0 rounded-t-sm transition-all duration-500"
+                  style={{ height: `${expenseHeight * 0.4}px`, zIndex: 1 }}
+                ></div>
                 <div
-                  key={branch.name}
-                  className="p-4 border border-gray-200 rounded-xl bg-gray-50 hover:shadow-md transition duration-200"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Building className="w-4 h-4 text-gray-600" />
-                    <span className="font-semibold text-gray-800 text-sm">
-                      {branch.name}
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-blue-700">
-                    {formatCurrency(branch.total)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">Collections</p>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full text-center text-gray-500 py-4 text-sm">
-                No branch performance data for this period.
+                  className="w-4 bg-indigo-400 absolute bottom-0 rounded-t-sm transition-all duration-500"
+                  style={{ height: `${incomeHeight * 0.4}px`, zIndex: 2 }}
+                ></div>
               </div>
-            )}
+              <span className="mt-2 text-sm text-gray-500">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Placeholder for the Budget Doughnut Chart.
+ */
+const BudgetChartPlaceholder = ({ data }) => {
+  const totalBudgeted = data.reduce((acc, item) => acc + item.amount, 0);
+  const totalValue = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(totalBudgeted);
+
+  const getDoughnutStyles = () => {
+    let totalPercent = 0;
+    let style = "";
+
+    data.forEach((item, index) => {
+      const percentage = (item.amount / totalBudgeted) * 100;
+      style += `${item.color} ${totalPercent}%, ${item.color} ${
+        totalPercent + percentage
+      }%, `;
+      totalPercent += percentage;
+    });
+
+    // Fallback for visual effect, using conic-gradient
+    return {
+      backgroundImage: `conic-gradient(${style.slice(0, -2)})`,
+    };
+  };
+
+  return (
+    <div className="p-6 h-full flex flex-col">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-gray-900">Budget</h2>
+        <ArrowUpRight className="w-5 h-5 text-gray-400" />
+      </div>
+
+      <div className="flex items-center space-x-6">
+        {/* Chart Area */}
+        <div className="relative w-28 h-28 flex-shrink-0">
+          <div
+            className="absolute inset-0 rounded-full"
+            style={getDoughnutStyles()}
+          ></div>
+          {/* Inner white circle to create the "doughnut" effect */}
+          <div className="absolute inset-4 bg-white rounded-full flex items-center justify-center border-4 border-gray-50 shadow-inner">
+            <div className="text-center">
+              <p className="text-sm text-gray-500 leading-none">
+                Total for month
+              </p>
+              <p className="text-lg font-bold text-gray-900 leading-none mt-0.5">
+                {totalValue.replace("$", "")}
+              </p>
+            </div>
           </div>
+        </div>
+
+        {/* Legend */}
+        <div className="flex-grow space-y-2">
+          {data.map((item, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-between text-sm"
+            >
+              <span className="flex items-center text-gray-700 truncate">
+                <span
+                  className="w-2 h-2 rounded-full mr-2 flex-shrink-0"
+                  style={{ backgroundColor: item.color }}
+                ></span>
+                {item.category}
+              </span>
+              <span className="font-semibold text-gray-800">
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  minimumFractionDigits: 0,
+                }).format(item.amount)}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 };
 
-// Memoized sub-components for better performance (available for future use)
-// const KPICard = memo(({ title, value, change, icon: Icon, iconColor, period }: {
-//   title: string;
-//   value: string;
-//   change: number;
-//   icon: any;
-//   iconColor: string;
-//   period: string;
-// }) => (
-//   <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-//     <div className="flex items-center justify-between mb-4">
-//       <div className={`p-3 bg-gradient-to-r ${iconColor} rounded-xl`}>
-//         <Icon className="w-6 h-6 text-white" />
-//       </div>
-//       <div className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${getPerformanceColor(change)}`}>
-//         {getPerformanceIcon(change)}
-//         <span>{change.toFixed(1)}%</span>
-//       </div>
-//     </div>
-//     <div className="space-y-1">
-//       <p className="text-sm font-medium text-gray-600">
-//         {title} ({period})
-//       </p>
-//       <p className="text-3xl font-bold text-gray-900">
-//         {value}
-//       </p>
-//     </div>
-//   </div>
-// ));
+/**
+ * Table for displaying recent transactions.
+ */
+const TransactionsTable = ({ transactions }) => {
+  return (
+    <div className="p-6 h-full flex flex-col">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-gray-900">
+          Recent transactions
+        </h2>
+        <div className="flex space-x-3 text-sm font-medium">
+          <button className="flex items-center text-gray-600 bg-gray-100 px-3 py-1 rounded-lg">
+            All accounts <ChevronDown className="w-4 h-4 ml-1" />
+          </button>
+          <button className="text-indigo-600 hover:text-indigo-800 font-medium">
+            See all
+          </button>
+        </div>
+      </div>
 
-// const TransactionItem = memo(({ transaction, formatCurrency }: {
-//   transaction: any;
-//   formatCurrency: (amount: number) => string;
-// }) => (
-//   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-//     <div className="flex items-center space-x-3">
-//       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-//         <Receipt className="w-4 h-4 text-blue-600" />
-//       </div>
-//       <div>
-//         <p className="font-medium text-gray-900 text-sm">
-//           {transaction.payerName || "Unknown Payer"}
-//         </p>
-//         <p className="text-xs text-gray-500">
-//           {transaction.transactionDate.toLocaleTimeString([], {
-//             hour: "2-digit",
-//             minute: "2-digit",
-//           })}
-//         </p>
-//       </div>
-//     </div>
-//     <div className="text-right">
-//       <p className="font-bold text-gray-900">
-//         {formatCurrency(transaction.amount)}
-//       </p>
-//       <p className="text-xs text-gray-500">
-//         {transaction.paymentMethod || "Unknown Method"}
-//       </p>
-//     </div>
-//   </div>
-// ));
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-white">
+            <tr>
+              {["DATE", "AMOUNT", "PAYMENT NAME", "METHOD", "Branch"].map(
+                (header) => (
+                  <th
+                    key={header}
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    {header}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {transactions.length === 0 ? (
+              <tr>
+                <td
+                  colSpan="5"
+                  className="px-4 py-8 text-center text-gray-500 italic"
+                >
+                  No recent transactions found.
+                </td>
+              </tr>
+            ) : (
+              transactions.map((t, index) => (
+                <tr
+                  key={index}
+                  className="hover:bg-gray-50 transition duration-150"
+                >
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    {t.transactionDate
+                      ? new Date(t.transactionDate).toLocaleDateString()
+                      : "N/A"}
+                  </td>
+                  <td
+                    className={`px-4 py-3 whitespace-nowrap text-sm font-medium ${
+                      t.amount < 0 ? "text-red-600" : "text-green-600"
+                    }`}
+                  >
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      signDisplay: "always",
+                      minimumFractionDigits: 0,
+                    }).format(t.amount)}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                    <div className="flex items-center">
+                      <span
+                        className="w-5 h-5 rounded-full mr-2"
+                        style={{ backgroundColor: t.color }}
+                      ></span>
+                      {t.revenueHead ? t.revenueHead.name : "N/A"}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    {t.paymentMethod ? t.paymentMethod.name : "N/A"}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    {t.branch ? t.branch.name : "N/A"}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
 
-export default memo(Dashboard);
+/**
+ * Progress bar component for savings goals.
+ */
+const ProgressBar = ({ current, goal, color }) => {
+  const percent = Math.min(100, (current / goal) * 100);
+  const formattedGoal = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+  }).format(goal);
+
+  return (
+    <div className="py-2">
+      <div className="flex justify-between items-center text-sm mb-1">
+        <span className="text-gray-900 font-medium">{formattedGoal}</span>
+        <span className="text-gray-500">{percent.toFixed(0)}%</span>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-2">
+        <div
+          className="h-2 rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${percent}%`, backgroundColor: color }}
+        ></div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Main Dashboard Component
+ */
+const App = () => {
+  const { data, loading } = useDashboardData();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-xl font-semibold text-indigo-600">
+          Loading Dashboard...
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-xl font-semibold text-red-600">
+          Failed to load data. Please check API configuration.
+        </div>
+      </div>
+    );
+  }
+
+  // Destructure data for cleaner usage
+  const { summary, transactions, moneyFlow, budget, savingsGoals } = data;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 font-sans">
+      {/* HEADER / NAVIGATION */}
+      <header className="bg-white rounded-xl shadow-md p-4 mb-6 flex justify-between items-center sticky top-0 z-10">
+        <div className="text-2xl font-bold text-gray-900">FinTrack</div>
+        <div className="flex items-center space-x-4">
+          <button className="p-2 rounded-full hover:bg-gray-100 transition">
+            <Search className="w-5 h-5 text-gray-600" />
+          </button>
+          <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
+            <Bell className="w-5 h-5 text-gray-600" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+          </button>
+          <div className="flex items-center space-x-2 border-l pl-4">
+            <div className="w-10 h-10 bg-indigo-200 rounded-full flex items-center justify-center text-indigo-800 font-bold text-sm">
+              AL
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-sm font-semibold text-gray-900">
+                Adaline Lively
+              </p>
+              <p className="text-xs text-gray-500">adalivelively@gmail.com</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* DASHBOARD CONTENT GRID */}
+      <main className="grid grid-cols-12 gap-6">
+        {/* TOP CONTROLS (This month & Manage widgets) */}
+        <div className="col-span-12 flex justify-between items-center mb-2">
+          <button className="flex items-center bg-white px-4 py-2 rounded-xl shadow-sm border text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+            <Menu className="w-4 h-4 mr-2" /> This month
+          </button>
+          <button className="flex items-center text-indigo-600 text-sm font-medium hover:text-indigo-800 transition">
+            <Settings2 className="w-4 h-4 mr-1.5" /> Manage widgets
+          </button>
+        </div>
+
+        {/* STATS CARDS ROW */}
+        <div className="col-span-12 grid grid-cols-2 md:grid-cols-4 gap-6">
+          {summary.map((item, index) => (
+            <StatCard key={index} {...item} />
+          ))}
+        </div>
+
+        {/* MONEY FLOW & BUDGET ROW (MAIN CONTENT) */}
+        <div className="col-span-12 lg:col-span-8 flex flex-col bg-white rounded-xl shadow-lg min-h-[400px]">
+          <MoneyFlowChartPlaceholder data={moneyFlow} />
+        </div>
+
+        <div className="col-span-12 lg:col-span-4 flex flex-col bg-white rounded-xl shadow-lg">
+          <BudgetChartPlaceholder data={budget} />
+        </div>
+
+        {/* TRANSACTIONS & SAVING GOALS ROW */}
+        <div className="col-span-12 lg:col-span-8 flex flex-col bg-white rounded-xl shadow-lg">
+          <TransactionsTable transactions={transactions} />
+        </div>
+
+        <div className="col-span-12 lg:col-span-4 flex flex-col bg-white rounded-xl shadow-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Saving goals
+            </h2>
+            <ArrowUpRight className="w-5 h-5 text-gray-400" />
+          </div>
+          <div className="space-y-4">
+            {savingsGoals.map((goal, index) => (
+              <div key={index} className="flex flex-col">
+                <p className="text-md font-medium text-gray-800 mb-1">
+                  {goal.name}
+                </p>
+                <ProgressBar
+                  current={goal.current}
+                  goal={goal.goal}
+                  color={goal.color}
+                />
+              </div>
+            ))}
+          </div>
+          <button className="mt-4 w-full flex items-center justify-center text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition py-2 rounded-lg text-sm font-medium">
+            <Plus className="w-4 h-4 mr-1" /> Add New Goal
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default App;
