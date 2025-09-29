@@ -2727,19 +2727,18 @@ app.patch(
   })
 );
 
-
 app.get(
   "/api/debug/:id",
   authenticateToken,
   asyncHandler(async (req, res) => {
     const projectId = parseInt(req.params.id, 10);
-    
-    console.log('Requested project ID:', projectId);
-    console.log('User making request:', {
+
+    console.log("Requested project ID:", projectId);
+    console.log("User making request:", {
       id: req.user.id,
       username: req.user.username,
       branchCode: req.user.branchCode,
-      permissions: req.user.role.permissions
+      permissions: req.user.role.permissions,
     });
 
     // Check if project exists without any relations
@@ -2747,21 +2746,20 @@ app.get(
       where: { id: projectId },
     });
 
-    console.log('Project found:', project);
+    console.log("Project found:", project);
 
     if (!project) {
-      return res.status(404).json({ 
-        error: 'Project not found',
+      return res.status(404).json({
+        error: "Project not found",
         searchedId: projectId,
-        typeOfSearchedId: typeof projectId
+        typeOfSearchedId: typeof projectId,
       });
     }
 
     // Check if user has permission to delete this project
-    const canDelete = (
+    const canDelete =
       project.branchCode === req.user.branchCode ||
-      req.user.role.permissions.projects?.includes("delete_all")
-    );
+      req.user.role.permissions.projects?.includes("delete_all");
 
     res.json({
       projectExists: true,
@@ -2773,15 +2771,13 @@ app.get(
       },
       user: {
         branchCode: req.user.branchCode,
-        hasDeleteAllPermission: req.user.role.permissions.projects?.includes("delete_all"),
-        canDelete: canDelete
-      }
+        hasDeleteAllPermission:
+          req.user.role.permissions.projects?.includes("delete_all"),
+        canDelete: canDelete,
+      },
     });
   })
 );
-
-
-
 
 // Delete Project
 
@@ -2794,8 +2790,8 @@ app.delete(
     if (isNaN(projectId)) throw new ValidationError("Invalid project ID.");
 
     const result = await prisma.$transaction(async (tx) => {
-      console.log('=== TRANSACTION STARTED ===');
-      
+      console.log("=== TRANSACTION STARTED ===");
+
       // Find the project INSIDE the transaction
       const existingProject = await tx.project.findUnique({
         where: { id: projectId },
@@ -2811,7 +2807,7 @@ app.delete(
         },
       });
 
-      console.log('Project found inside transaction:', existingProject?.id);
+      console.log("Project found inside transaction:", existingProject?.id);
 
       if (!existingProject) {
         throw new NotFoundError("Project not found.");
@@ -2822,7 +2818,9 @@ app.delete(
         existingProject.branchCode !== req.user.branchCode &&
         !req.user.role.permissions.projects?.includes("delete_all")
       ) {
-        throw new ForbiddenError("You can only delete projects in your own branch.");
+        throw new ForbiddenError(
+          "You can only delete projects in your own branch."
+        );
       }
 
       // Check dependencies
@@ -2837,14 +2835,14 @@ app.delete(
       }
 
       const revenueHeadCode = existingProject.revenueHeadCode;
-      console.log('Revenue head code:', revenueHeadCode);
+      console.log("Revenue head code:", revenueHeadCode);
 
       // DELETE PROJECT FIRST - RevenueHead will be automatically deleted due to onDelete: Cascade
-      console.log('Deleting project...');
+      console.log("Deleting project...");
       const deletedProject = await tx.project.delete({
         where: { id: projectId },
       });
-      console.log('Project deleted successfully');
+      console.log("Project deleted successfully");
 
       // Verify revenue head was deleted by cascade
       if (revenueHeadCode) {
@@ -2852,16 +2850,16 @@ app.delete(
           const revenueHeadAfter = await tx.revenueHead.findUnique({
             where: { code: revenueHeadCode },
           });
-          console.log('Revenue head after project deletion:', revenueHeadAfter);
+          console.log("Revenue head after project deletion:", revenueHeadAfter);
         } catch (error) {
-          console.log('Revenue head check completed');
+          console.log("Revenue head check completed");
         }
       }
 
       return {
         existingProject,
         revenueHeadCode,
-        deletedProject
+        deletedProject,
       };
     });
 
@@ -2892,17 +2890,11 @@ app.delete(
     }
 
     res.status(200).json({
-      message: "Project deleted successfully. Associated revenue head was automatically removed."
+      message:
+        "Project deleted successfully. Associated revenue head was automatically removed.",
     });
   })
 );
-
-
-
-
-
-
-
 
 // Associate Member with Project
 app.post(
@@ -3075,6 +3067,7 @@ app.post(
   authenticateToken,
   checkPermission("transactions", "create"),
   asyncHandler(async (req, res) => {
+    // Validate request payload
     const { error, value } = contributionCreateSchema.validate(req.body);
     if (error) throw new ValidationError(error.details[0].message);
 
@@ -3089,31 +3082,43 @@ app.post(
       paymentDate,
     } = value;
 
-    // Verify member and project exist and are linked
-    const memberProject = await prisma.memberProject.findUnique({
-      where: {
-        memberId_projectId: { memberId, projectId },
-      },
-      include: {
-        member: {
-          select: {
-            memberNumber: true,
-            firstName: true,
-            lastName: true,
-            branchCode: true,
-          },
+    // Verify member and project exist
+    const [member, project] = await Promise.all([
+      prisma.member.findUnique({
+        where: { id: memberId },
+        select: {
+          id: true,
+          memberNumber: true,
+          firstName: true,
+          lastName: true,
+          branchCode: true,
         },
-        project: { select: { name: true, branchCode: true, isActive: true } },
-      },
-    });
+      }),
+      prisma.project.findUnique({
+        where: { id: projectId },
+        select: {
+          id: true,
+          name: true,
+          branchCode: true,
+          isActive: true,
+        },
+      }),
+    ]);
 
-    if (!memberProject) {
-      throw new NotFoundError("Member is not enrolled in this project.");
-    }
+    if (!member) throw new NotFoundError("Member not found.");
+    if (!project) throw new NotFoundError("Project not found.");
 
-    if (!memberProject.project.isActive) {
+    // Check if project is active
+    if (!project.isActive) {
       throw new ValidationError(
         "Cannot record contributions for inactive projects."
+      );
+    }
+
+    // Check if member and project belong to the same branch
+    if (member.branchCode !== project.branchCode) {
+      throw new ValidationError(
+        "Member and project must belong to the same branch."
       );
     }
 
@@ -3127,14 +3132,15 @@ app.post(
     if (!paymentMethodExists)
       throw new NotFoundError("Payment method not found.");
 
-    const transaction = await prisma.$transaction(async (tx) => {
+    // ✅ Use a transaction to safely generate receipt number and insert contribution
+    const contribution = await prisma.$transaction(async (tx) => {
       const receiptNumber = await generateReceiptNumber(
         "contribution",
-        memberProject.project.branchCode,
+        member.branchCode, // Pass branchCode
         tx
       );
 
-      return tx.memberContribution.create({
+      const newContribution = await tx.memberContribution.create({
         data: {
           receiptNumber,
           memberId,
@@ -3158,22 +3164,26 @@ app.post(
           paymentMethod: { select: { name: true } },
         },
       });
+
+      return newContribution;
     });
 
+    // ✅ Log the audit trail after successful transaction
     await logAudit(
       req.user.id,
       req.user.username,
       "CREATE",
       "member_contributions",
-      transaction.receiptNumber,
+      contribution.receiptNumber,
       null,
-      transaction,
+      contribution,
       req
     );
 
+    // ✅ Send response
     res.status(201).json({
       message: "Contribution recorded successfully.",
-      contribution: transaction,
+      contribution,
     });
   })
 );
