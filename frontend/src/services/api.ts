@@ -1,4 +1,4 @@
-import type { Transaction } from "@/utils/Types";
+import type { Transaction,ContributionCreateRequest,ContributionResponse } from "@/utils/Types";
 
 let BASE_URL =
   import.meta.env.VITE_APP_API_BASE_URL || "http://localhost:5000/api";
@@ -35,10 +35,24 @@ const apiClient = async (
     const response = await fetch(url, config);
 
     if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ message: "An unexpected error occurred." }));
-      throw new Error(errorData.message || "API request failed.");
+      // First try to get the response as text
+      const errorText = await response.text();
+      let errorMessage = "An unexpected error occurred.";
+      
+      if (errorText) {
+        try {
+          // Try to parse as JSON
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorText;
+        } catch {
+          // If not JSON, use the text as error message
+          errorMessage = errorText;
+        }
+      } else {
+        errorMessage = `API request failed with status ${response.status}`;
+      }
+      
+      throw new Error(errorMessage);
     }
 
     if (options?.isBlob) {
@@ -189,6 +203,24 @@ export const updateExpenditureHead = (code: any, headData: any) =>
   apiClient(`/expenditure-heads/${code}`, "PATCH", headData);
 export const deleteExpenditureHead = (code: any) =>
   apiClient(`/expenditure-heads/${code}`, "DELETE");
+
+
+//contrubutions
+export const createContribution = (
+  contributionData: ContributionCreateRequest
+): Promise<ContributionResponse> =>
+  apiClient("/contributions", "POST", contributionData);
+
+export const updateContribution = (id: string | number, contributionData: any) =>
+  apiClient(`/contributions/${id}`, "PATCH", contributionData);
+
+export const deleteContribution = (id: string | number) =>
+  apiClient(`/contributions/${id}`, "DELETE");
+
+export const getMemberContributions = (memberId: string | number, params = {}) =>
+  apiClient(`/members/${memberId}/contributions?${new URLSearchParams(params)}`);
+
+
 
 
 // --- EXPENDITURE MANAGEMENT ---

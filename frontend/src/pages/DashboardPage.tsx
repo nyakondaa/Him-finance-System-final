@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { getTransactions } from "@/services/api"; // Adjust the import path as necessary
+import { getProjects, getTransactions } from "@/services/api"; // Adjust the import path as necessary
 import {
   Search,
   Bell,
@@ -30,18 +30,50 @@ import {
 // --- MOCK API FUNCTION (Replaces '@/services/api' for self-containment) ---
 // Simulates the async API call to fetch transactions
 const getTransactionsData = async ({ limit, offset }) => {
-  
- 
   const response = await getTransactions({ limit, offset });
 
-  
   const transactionsData = response.transactions;
-
 
   const sliced = transactionsData.slice(offset, offset + limit);
   console.log("Mock API - Fetched transactions:", sliced);
 
   return { data: { transactions: sliced } };
+};
+
+
+interface ProjectData{
+  id: number;
+  name: string;
+  currentAmount: number;
+  targetAmount: number;
+  status: string;  
+}
+
+// services/api.js
+export const getProjectsData = async (): Promise<ProjectData[]> => {
+  try {
+    console.log("🔄 API: Fetching projects...");
+    
+    const response = await getProjects();
+    console.log("📦 API: Raw response:", response);
+    
+    // Map the API response to match ProjectData interface
+    const mappedProjects = response.map((project: any) => ({
+      id: project.id,
+      name: project.name,
+      currentAmount: project.totalCollected || 0, // Use totalCollected from your backend
+      targetAmount: parseFloat(project.targetAmount) || 0,
+      status: project.status,
+    
+    }));
+    
+    console.log("🗺️ API: Mapped projects:", mappedProjects);
+    return mappedProjects;
+    
+  } catch (error) {
+    console.error('❌ API: Error fetching projects:', error);
+    throw error;
+  }
 };
 
 // --- MOCK DATA STRUCTURE (Now defined without transactions) ---
@@ -111,17 +143,16 @@ const useDashboardData = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Fetch real transactions using the user's API function (or the mock)
-        // NOTE: In your actual Next.js environment, you would use:
-        // const response = await getTransactions({ limit: 5, offset: 0 });
         const response = await getTransactionsData({ limit: 5, offset: 0 });
         console.log("Fetched transactions:", response);
-      
+
+        
+        console.log("Fetched projects:", getProjectsData());
 
         // 2. Set the data state, merging the static mock data with the fetched transactions.
         setData((prevData) => ({
           ...prevData,
-          transactions:response.data.transactions || [],
+          transactions: response.data.transactions || [],
         }));
 
         console.log(
@@ -546,7 +577,7 @@ const App = () => {
         <div className="col-span-12 lg:col-span-4 flex flex-col bg-white rounded-xl shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-gray-900">
-              Saving goals
+              PROJECT GOALS
             </h2>
             <ArrowUpRight className="w-5 h-5 text-gray-400" />
           </div>

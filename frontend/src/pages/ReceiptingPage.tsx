@@ -12,6 +12,9 @@ import {
   generateReceipt,
   getCurrencies,
   getPaymentMethods,
+  getProjects,
+  createContribution,
+
 } from "@/services/api";
 import useAuth from "@/hooks/useAuth";
 import html2canvas from "html2canvas";
@@ -179,73 +182,80 @@ const ReceiptingPage = () => {
     }, 2500);
   };
 
-const handlePdfPrint = useCallback(async () => {
-  const element = printContentRef.current;
-  if (!element) return;
+  const handlePdfPrint = useCallback(async () => {
+    const element = printContentRef.current;
+    if (!element) return;
 
-  setIsPrinting(true);
+    setIsPrinting(true);
 
-  try {
-    const canvas = await html2canvas(element, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
+    try {
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL("image/png");
 
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [80, 297] });
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: [80, 297],
+      });
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
 
-    // Create a blob
-    const pdfBlob = pdf.output("blob");
-    const blobUrl = URL.createObjectURL(pdfBlob);
+      // Create a blob
+      const pdfBlob = pdf.output("blob");
+      const blobUrl = URL.createObjectURL(pdfBlob);
 
-    // Open in iframe for printing
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.src = blobUrl;
-    document.body.appendChild(iframe);
+      // Open in iframe for printing
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
 
-    iframe.onload = () => {
-      const cw = iframe.contentWindow;
-      cw?.focus();
-      // Prefer event-based cleanup to avoid closing the dialog prematurely
-      const cleanup = () => {
-        try {
-          document.body.removeChild(iframe);
-        } catch {}
-        URL.revokeObjectURL(blobUrl);
-        setIsPrinting(false);
+      iframe.onload = () => {
+        const cw = iframe.contentWindow;
+        cw?.focus();
+        // Prefer event-based cleanup to avoid closing the dialog prematurely
+        const cleanup = () => {
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+          URL.revokeObjectURL(blobUrl);
+          setIsPrinting(false);
+        };
+        // afterprint handler (best-effort; may not fire in all browsers)
+        if (cw && "onafterprint" in cw) {
+          (cw as any).onafterprint = cleanup;
+        }
+        // Fallback cleanup in case afterprint doesn't fire
+        setTimeout(cleanup, 15000);
+        cw?.print();
       };
-      // afterprint handler (best-effort; may not fire in all browsers)
-      if (cw && 'onafterprint' in cw) {
-        (cw as any).onafterprint = cleanup;
-      }
-      // Fallback cleanup in case afterprint doesn't fire
-      setTimeout(cleanup, 15000);
-      cw?.print();
-    };
 
-    showToast("Receipt ready to print.");
-    setReceipt({
-      payerName: "",
-      revenueHeadCode: "",
-      amount: "",
-      currency: "USD",
-      paymentMethod: "Cash",
-      branchCode: "",
-    });
-    setSearchTerm("");
-  } catch (err) {
-    console.error(err);
-    showModal("Failed to generate and print PDF. Please try again.", "Printing Error", "error");
-  }
-}, [receipt]);
-
+      showToast("Receipt ready to print.");
+      setReceipt({
+        payerName: "",
+        revenueHeadCode: "",
+        amount: "",
+        currency: "USD",
+        paymentMethod: "Cash",
+        branchCode: "",
+      });
+      setSearchTerm("");
+    } catch (err) {
+      console.error(err);
+      showModal(
+        "Failed to generate and print PDF. Please try again.",
+        "Printing Error",
+        "error"
+      );
+    }
+  }, [receipt]);
 
   // Handle form submission and transaction creation
 
@@ -258,6 +268,43 @@ const handlePdfPrint = useCallback(async () => {
     }
     return map;
   }, [paymentMethods]);
+
+  interface ProjectData {
+    id: number;
+    name: string;
+    currentAmount: number;
+    targetAmount: number;
+    status: string;
+    revenueHeadCode?: string;
+    totalCollected: number | null;
+  }
+
+  // services/api.js
+  const getProjectsData = async (): Promise<ProjectData[]> => {
+    try {
+      console.log("🔄 API: Fetching projects...");
+
+      const response = await getProjects();
+      console.log("📦 API: Raw response:", response);
+
+      // Map the API response to match ProjectData interface
+      const mappedProjects = response.map((project: any) => ({
+        id: project.id,
+        name: project.name,
+        currentAmount: project.totalCollected || 0, // Use totalCollected from your backend
+        targetAmount: parseFloat(project.targetAmount) || 0,
+        status: project.status,
+        revenueHeadCode: project.revenueHeadCode || undefined,
+        totalCollected: project.totalCollected || 0,
+      }));
+
+      console.log(" API: Mapped projects:", mappedProjects);
+      return mappedProjects;
+    } catch (error) {
+      console.error("❌ API: Error fetching projects:", error);
+      throw error;
+    }
+  };
 
   const handleGenerateReceipt = async () => {
     if (!isFormComplete) {
@@ -272,20 +319,92 @@ const handlePdfPrint = useCallback(async () => {
     }
 
     try {
-       await generateReceipt({
+      // Generate the receipt first
+      const receiptResult = await generateReceipt({
         memberId: selectedMember.id,
         revenueHeadCode: receipt.revenueHeadCode,
         amount: parseFloat(receipt.amount),
         currencyCode: receipt.currency,
         paymentMethodId: paymentMethodMap[receipt.paymentMethod],
         transactionDate: new Date().toISOString(),
-        
       });
 
+      // Check if the revenue head code is from a project
+      const projects = await getProjectsData();
+      const project = projects.find(
+        (p) => p.revenueHeadCode === receipt.revenueHeadCode
+      );
+
+      if (project) {
+        console.log(`Receipt is for project: ${project.name}`);
+
+        try {
+          // Add to member_contributions table
+          const contributionData = {
+            memberId: selectedMember.id,
+            projectId: project.id,
+            amount: parseFloat(receipt.amount),
+            currencyCode: receipt.currency,
+            paymentMethodId: paymentMethodMap[receipt.paymentMethod],
+            referenceNumber: receiptResult.receiptNumber,
+            notes: `Contribution for project: ${project.name}`,
+            paymentDate: new Date().toISOString(),
+          };
+
+          console.log("Creating contribution with data:", contributionData);
+          console.log(
+            "Payload sent to backend:",
+            JSON.stringify(contributionData, null, 2)
+          );
+
+          const contributionResult = await createContribution(contributionData);
+          console.log(
+            "Contribution recorded successfully:",
+            contributionResult
+          );
+
+          console.log("updated project:", project);
+        
+          showToast(
+            "Receipt generated and contribution recorded successfully."
+          );
+        } catch (contributionError: any) {
+          console.error("Contribution recording error:", contributionError);
+
+          let userMessage =
+            contributionError.message || "Failed to record contribution";
+
+          // Handle specific error cases
+          if (userMessage.includes("same branch")) {
+            userMessage = `Cannot record contribution: The member and project belong to different branches.`;
+          } else if (userMessage.includes("inactive projects")) {
+            userMessage = `Cannot record contribution: The project is inactive.`;
+          } else if (
+            userMessage.includes("Member not found") ||
+            userMessage.includes("Project not found")
+          ) {
+            userMessage = `Cannot record contribution: ${userMessage}`;
+          } else if (
+            userMessage.includes("Currency not found") ||
+            userMessage.includes("Payment method not found")
+          ) {
+            userMessage = `Cannot record contribution: ${userMessage}`;
+          }
+
+          showModal(
+            `Receipt was generated successfully but contribution recording failed: ${userMessage}`,
+            "Partial Success",
+            "error"
+          );
+        }
+      } else {
+        console.log("Receipt is not for a project.");
+        showToast("Receipt generated successfully.");
+      }
+
       await handlePdfPrint();
-      showToast("Receipt generated successfully.");
     } catch (err: any) {
-      console.error(err);
+      console.error("Main error:", err);
       showModal(err.message || "Failed to generate receipt", "Error", "error");
     }
   };

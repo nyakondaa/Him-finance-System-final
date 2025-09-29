@@ -72,3 +72,57 @@ export  interface Member {
   approvalStatus: string;
   taxAmount?: number;
 }
+
+// types.ts - Add these types to your existing types file
+export interface ContributionCreateRequest {
+  memberId: number;
+  projectId: number;
+  amount: string | number;
+  currencyCode: string;
+  paymentMethodId: number;
+  referenceNumber?: string;
+  notes?: string;
+  paymentDate: string; // ISO string format
+}
+
+export interface ContributionResponse {
+  id: number;
+  receiptNumber: string;
+  memberId: number;
+  projectId: number;
+  amount: string;
+  currencyCode: string;
+  paymentMethodId: number;
+  referenceNumber?: string;
+  paymentDate: string;
+  processedBy: number;
+  notes?: string;
+  status: string;
+  isRecurring: boolean;
+  recurringPlanId?: number;
+  createdAt: string;
+  updatedAt: string;
+  member: {
+    memberNumber: string;
+    firstName: string;
+    lastName: string;
+  };
+  project: {
+    name: string;
+  };
+  processor: {
+    username: string;
+  };
+  currency: {
+    code: string;
+    symbol: string;
+  };
+  paymentMethod: {
+    name: string;
+  };
+}
+
+export interface ContributionApiResponse {
+  message: string;
+  contribution: ContributionResponse;
+}
