@@ -2438,6 +2438,7 @@ app.delete(
 // --- PROJECT MANAGEMENT ROUTES ---
 
 // Create Project
+
 app.post(
   "/api/projects",
   authenticateToken,
@@ -2455,32 +2456,97 @@ app.post(
     if (!branchExists) throw new NotFoundError("Branch not found.");
     if (!currencyExists) throw new NotFoundError("Currency not found.");
 
-    const newProject = await prisma.project.create({
-      data: value,
-      include: {
-        branch: { select: { name: true } },
-        currency: { select: { name: true, symbol: true } },
-      },
+    // Use transaction to ensure both project and revenue head are created together
+    const result = await prisma.$transaction(async (tx) => {
+      // First, create the project
+      const newProject = await tx.project.create({
+        data: value,
+      });
+
+      // Generate revenue head name and code for the project
+      const revenueHeadName = `Project - ${newProject.name}`;
+
+      // Check if revenue head with this name already exists for the branch
+      const existingHead = await tx.revenueHead.findFirst({
+        where: {
+          name: revenueHeadName,
+          branchCode: value.branchCode,
+        },
+      });
+
+      if (existingHead) {
+        throw new ConflictError(
+          "Revenue head for this project already exists."
+        );
+      }
+
+      // FIXED: Generate unique revenue head code using project ID
+      const revenueHeadCode = `PROJ-${newProject.id}`;
+
+      // Alternative: If you prefer the branch-based format, use this approach:
+      // const revenueHeadCode = await generateUniqueRevenueHeadCode(tx, value.branchCode);
+
+      // Create the revenue head for the project
+      const projectRevenueHead = await tx.revenueHead.create({
+        data: {
+          code: revenueHeadCode,
+          name: revenueHeadName,
+          branchCode: value.branchCode,
+          description: `Revenue head for project: ${newProject.name}`,
+          isActive: newProject.isActive,
+        },
+      });
+
+      // Link the revenue head to the project
+      const updatedProject = await tx.project.update({
+        where: { id: newProject.id },
+        data: {
+          revenueHeadCode: projectRevenueHead.code,
+        },
+        include: {
+          branch: { select: { name: true } },
+          currency: { select: { name: true, symbol: true } },
+          revenueHead: true,
+        },
+      });
+
+      return {
+        project: updatedProject,
+        revenueHead: projectRevenueHead,
+      };
     });
 
+    // Log audit for project creation
     await logAudit(
       req.user.id,
       req.user.username,
       "CREATE",
       "projects",
-      newProject.id,
+      result.project.id,
       null,
-      newProject,
+      result.project,
+      req
+    );
+
+    // Log audit for revenue head creation
+    await logAudit(
+      req.user.id,
+      req.user.username,
+      "CREATE",
+      "revenue_heads",
+      result.revenueHead.code,
+      null,
+      result.revenueHead,
       req
     );
 
     res.status(201).json({
-      message: "Project created successfully.",
-      project: newProject,
+      message: "Project created successfully with revenue head.",
+      project: result.project,
+      revenueHead: result.revenueHead,
     });
   })
 );
-
 // Get Projects
 app.get(
   "/api/projects",
@@ -2491,7 +2557,7 @@ app.get(
 
     let whereClause = {};
 
-    if (!req.user.role.permissions.projects?.includes("read_all")) {
+    if (!req.user.role.permissions.projects?.includes("read")) {
       whereClause.branchCode = req.user.branchCode;
     } else if (branchCode) {
       whereClause.branchCode = branchCode;
@@ -2661,7 +2727,64 @@ app.patch(
   })
 );
 
+
+app.get(
+  "/api/debug/:id",
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const projectId = parseInt(req.params.id, 10);
+    
+    console.log('Requested project ID:', projectId);
+    console.log('User making request:', {
+      id: req.user.id,
+      username: req.user.username,
+      branchCode: req.user.branchCode,
+      permissions: req.user.role.permissions
+    });
+
+    // Check if project exists without any relations
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    console.log('Project found:', project);
+
+    if (!project) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        searchedId: projectId,
+        typeOfSearchedId: typeof projectId
+      });
+    }
+
+    // Check if user has permission to delete this project
+    const canDelete = (
+      project.branchCode === req.user.branchCode ||
+      req.user.role.permissions.projects?.includes("delete_all")
+    );
+
+    res.json({
+      projectExists: true,
+      project: {
+        id: project.id,
+        name: project.name,
+        branchCode: project.branchCode,
+        revenueHeadCode: project.revenueHeadCode,
+      },
+      user: {
+        branchCode: req.user.branchCode,
+        hasDeleteAllPermission: req.user.role.permissions.projects?.includes("delete_all"),
+        canDelete: canDelete
+      }
+    });
+  })
+);
+
+
+
+
 // Delete Project
+
 app.delete(
   "/api/projects/:id",
   authenticateToken,
@@ -2670,58 +2793,116 @@ app.delete(
     const projectId = parseInt(req.params.id, 10);
     if (isNaN(projectId)) throw new ValidationError("Invalid project ID.");
 
-    const existingProject = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        _count: {
-          select: {
-            contributions: true,
-            memberProjects: true,
-            expenditures: true,
-            contracts: true,
+    const result = await prisma.$transaction(async (tx) => {
+      console.log('=== TRANSACTION STARTED ===');
+      
+      // Find the project INSIDE the transaction
+      const existingProject = await tx.project.findUnique({
+        where: { id: projectId },
+        include: {
+          _count: {
+            select: {
+              contributions: true,
+              memberProjects: true,
+              expenditures: true,
+              contracts: true,
+            },
           },
         },
-      },
+      });
+
+      console.log('Project found inside transaction:', existingProject?.id);
+
+      if (!existingProject) {
+        throw new NotFoundError("Project not found.");
+      }
+
+      // Check permissions
+      if (
+        existingProject.branchCode !== req.user.branchCode &&
+        !req.user.role.permissions.projects?.includes("delete_all")
+      ) {
+        throw new ForbiddenError("You can only delete projects in your own branch.");
+      }
+
+      // Check dependencies
+      const hasDependencies =
+        existingProject._count.contributions > 0 ||
+        existingProject._count.memberProjects > 0 ||
+        existingProject._count.expenditures > 0 ||
+        existingProject._count.contracts > 0;
+
+      if (hasDependencies) {
+        throw new ConflictError("Cannot delete project with dependencies.");
+      }
+
+      const revenueHeadCode = existingProject.revenueHeadCode;
+      console.log('Revenue head code:', revenueHeadCode);
+
+      // DELETE PROJECT FIRST - RevenueHead will be automatically deleted due to onDelete: Cascade
+      console.log('Deleting project...');
+      const deletedProject = await tx.project.delete({
+        where: { id: projectId },
+      });
+      console.log('Project deleted successfully');
+
+      // Verify revenue head was deleted by cascade
+      if (revenueHeadCode) {
+        try {
+          const revenueHeadAfter = await tx.revenueHead.findUnique({
+            where: { code: revenueHeadCode },
+          });
+          console.log('Revenue head after project deletion:', revenueHeadAfter);
+        } catch (error) {
+          console.log('Revenue head check completed');
+        }
+      }
+
+      return {
+        existingProject,
+        revenueHeadCode,
+        deletedProject
+      };
     });
 
-    if (!existingProject) throw new NotFoundError("Project not found.");
-
-    if (
-      existingProject.branchCode !== req.user.branchCode &&
-      !req.user.role.permissions.projects?.includes("delete_all")
-    ) {
-      throw new ForbiddenError(
-        "You can only delete projects in your own branch."
-      );
-    }
-
-    const hasDependencies =
-      existingProject._count.contributions > 0 ||
-      existingProject._count.memberProjects > 0 ||
-      existingProject._count.expenditures > 0 ||
-      existingProject._count.contracts > 0;
-    if (hasDependencies) {
-      throw new ConflictError(
-        "Cannot delete project with associated contributions, members, expenditures, or contracts."
-      );
-    }
-
-    await prisma.project.delete({ where: { id: projectId } });
-
+    // Audit logs
     await logAudit(
       req.user.id,
       req.user.username,
       "DELETE",
       "projects",
       projectId,
-      existingProject,
+      result.existingProject,
       null,
       req
     );
 
-    res.status(200).json({ message: "Project deleted successfully." });
+    // Also log revenue head deletion since it was cascaded
+    if (result.revenueHeadCode) {
+      await logAudit(
+        req.user.id,
+        req.user.username,
+        "DELETE",
+        "revenue_heads",
+        result.revenueHeadCode,
+        { code: result.revenueHeadCode },
+        null,
+        req
+      );
+    }
+
+    res.status(200).json({
+      message: "Project deleted successfully. Associated revenue head was automatically removed."
+    });
   })
 );
+
+
+
+
+
+
+
 
 // Associate Member with Project
 app.post(
@@ -3300,8 +3481,6 @@ app.get(
     const skip = parseInt(offset, 10);
 
     let whereClause = {};
-
-  
 
     // Approval status
     if (approvalStatus && approvalStatus.trim() !== "") {

@@ -261,6 +261,7 @@ model RevenueHead {
   description       String?
   isActive          Boolean            @default(true) @map("is_active")
   updatedAt         DateTime           @updatedAt @map("updated_at")
+  project           Project?
   contributionPlans ContributionPlan[]
   branch            Branch             @relation(fields: [branchCode], references: [code])
   transactions      Transaction[]
@@ -305,6 +306,10 @@ model Project {
   isActive          Boolean              @default(true) @map("is_active")
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  revenueHeadCode   String?              @unique @map("revenue_head_code")
+  revenueHead       RevenueHead?         @relation(fields: [revenueHeadCode], references: [code], onDelete: Cascade)
+
   budgetAllocations BudgetAllocation[]
   budgetLines       BudgetLine[]
   contracts         Contract[]
