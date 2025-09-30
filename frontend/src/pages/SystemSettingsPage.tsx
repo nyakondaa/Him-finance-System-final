@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings, Plus, Save, Edit, Trash2 } from "lucide-react";
+import { Settings, Plus, Save, Edit, Trash2, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
 import {
   getBranches,
   addBranch,
@@ -45,8 +45,6 @@ interface SystemSettingsPageProps {
   ) => void;
 }
 
-
-
 const SystemSettingsPage = ({ showModal }: SystemSettingsPageProps): any => {
   const queryClient = useQueryClient();
   // We're using a type assertion here to tell TypeScript the shape of the return value
@@ -55,6 +53,8 @@ const SystemSettingsPage = ({ showModal }: SystemSettingsPageProps): any => {
   const [newBranchCode, setNewBranchCode] = useState<string>("");
   const [newBranchName, setNewBranchName] = useState<string>("");
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+  const [showRevenueHeads, setShowRevenueHeads] = useState<boolean>(true);
+  const [showExpenditureHeads, setShowExpenditureHeads] = useState<boolean>(true);
 
   // Fetch branches with proper typing for the data and error.
   const {
@@ -177,6 +177,7 @@ const SystemSettingsPage = ({ showModal }: SystemSettingsPageProps): any => {
         System Settings
       </h2>
 
+      {/* Branches Section */}
       <div className="bg-white p-8 rounded-xl shadow-lg mb-8 border border-gray-200">
         <h3 className="text-xl font-semibold mb-6 text-gray-700">
           {editingBranch ? "Edit Branch" : "Manage Branches"}
@@ -242,7 +243,8 @@ const SystemSettingsPage = ({ showModal }: SystemSettingsPageProps): any => {
         </div>
       </div>
 
-      <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+      {/* Existing Branches Table */}
+      <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 mb-8">
         <h3 className="text-xl font-semibold mb-6 text-gray-700">
           Existing Branches
         </h3>
@@ -300,8 +302,76 @@ const SystemSettingsPage = ({ showModal }: SystemSettingsPageProps): any => {
           </table>
         </div>
       </div>
-      <RevenueHeadsPage showModal={showModal}></RevenueHeadsPage>
-      <ExpenditureHeadsPage showModal={showModal}></ExpenditureHeadsPage>
+
+      {/* Revenue Heads Section with Toggle */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 mb-8">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
+            Revenue Heads Management
+            {showRevenueHeads ? (
+              <ChevronDown className="w-5 h-5 text-gray-500" />
+            ) : (
+              <ChevronRight className="w-5 h-5 text-gray-500" />
+            )}
+          </h3>
+          <button
+            onClick={() => setShowRevenueHeads(!showRevenueHeads)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition duration-200"
+          >
+            {showRevenueHeads ? (
+              <>
+                <EyeOff className="w-4 h-4" />
+                Hide
+              </>
+            ) : (
+              <>
+                <Eye className="w-4 h-4" />
+                Show
+              </>
+            )}
+          </button>
+        </div>
+        {showRevenueHeads && (
+          <div className="p-6">
+            <RevenueHeadsPage showModal={showModal} />
+          </div>
+        )}
+      </div>
+
+      {/* Expenditure Heads Section with Toggle */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
+            Expenditure Heads Management
+            {showExpenditureHeads ? (
+              <ChevronDown className="w-5 h-5 text-gray-500" />
+            ) : (
+              <ChevronRight className="w-5 h-5 text-gray-500" />
+            )}
+          </h3>
+          <button
+            onClick={() => setShowExpenditureHeads(!showExpenditureHeads)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition duration-200"
+          >
+            {showExpenditureHeads ? (
+              <>
+                <EyeOff className="w-4 h-4" />
+                Hide
+              </>
+            ) : (
+              <>
+                <Eye className="w-4 h-4" />
+                Show
+              </>
+            )}
+          </button>
+        </div>
+        {showExpenditureHeads && (
+          <div className="p-6">
+            <ExpenditureHeadsPage showModal={showModal} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

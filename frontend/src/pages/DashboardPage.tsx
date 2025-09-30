@@ -13,6 +13,8 @@ import {
   TrendingDown,
   Settings2,
 } from "lucide-react";
+import DashboardSummary from "@/components/Dashboard";
+import StatCard from "@/components/Dashboard";
 
 // --- MOCK TYPE DEFINITION (Replaces '@/utils/Types' for self-containment) ---
 // This defines the expected structure of a transaction item.
@@ -40,23 +42,22 @@ const getTransactionsData = async ({ limit, offset }) => {
   return { data: { transactions: sliced } };
 };
 
-
-interface ProjectData{
+interface ProjectData {
   id: number;
   name: string;
   currentAmount: number;
   targetAmount: number;
-  status: string;  
+  status: string;
 }
 
 // services/api.js
 export const getProjectsData = async (): Promise<ProjectData[]> => {
   try {
     console.log("🔄 API: Fetching projects...");
-    
+
     const response = await getProjects();
     console.log("📦 API: Raw response:", response);
-    
+
     // Map the API response to match ProjectData interface
     const mappedProjects = response.map((project: any) => ({
       id: project.id,
@@ -64,14 +65,12 @@ export const getProjectsData = async (): Promise<ProjectData[]> => {
       currentAmount: project.totalCollected || 0, // Use totalCollected from your backend
       targetAmount: parseFloat(project.targetAmount) || 0,
       status: project.status,
-    
     }));
-    
+
     console.log("🗺️ API: Mapped projects:", mappedProjects);
     return mappedProjects;
-    
   } catch (error) {
-    console.error('❌ API: Error fetching projects:', error);
+    console.error("❌ API: Error fetching projects:", error);
     throw error;
   }
 };
@@ -125,19 +124,26 @@ const MOCK_DATA_STATIC = {
     { category: "Traveling", amount: 300, color: "#10B981" },
   ],
   // 5. Saving Goals Data
-  savingsGoals: [
-    { name: "Macbook Pro", current: 1650, goal: 2500, color: "#3B82F6" },
-    { name: "New car", current: 5000, goal: 60000, color: "#8B5CF6" },
-    { name: "New house", current: 150, goal: 150000, color: "#EC4899" },
-  ],
 };
 
 /**
  * Custom hook to manage all dashboard data fetching and state.
  */
+interface DashboardData {
+  summary: typeof MOCK_DATA_STATIC.summary;
+  moneyFlow: typeof MOCK_DATA_STATIC.moneyFlow;
+  budget: typeof MOCK_DATA_STATIC.budget;
+  transactions: any[];
+  projectGoals: ProjectData[];
+}
+
 const useDashboardData = () => {
   // Initialize data state with static mock data and an empty array for transactions
-  const [data, setData] = useState({ ...MOCK_DATA_STATIC, transactions: [] });
+  const [data, setData] = useState<DashboardData>({
+    ...MOCK_DATA_STATIC,
+    transactions: [],
+    projectGoals: [],
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -145,14 +151,13 @@ const useDashboardData = () => {
       try {
         const response = await getTransactionsData({ limit: 5, offset: 0 });
         console.log("Fetched transactions:", response);
-
-        
-        console.log("Fetched projects:", getProjectsData());
+        const projects = await getProjectsData();
 
         // 2. Set the data state, merging the static mock data with the fetched transactions.
         setData((prevData) => ({
           ...prevData,
           transactions: response.data.transactions || [],
+          projectGoals: projects || [],
         }));
 
         console.log(
@@ -178,42 +183,11 @@ const useDashboardData = () => {
 /**
  * Card for displaying summary statistics (Balance, Income, Expense, Savings).
  */
-const StatCard = ({ title, value, change, isPositive, Icon }) => {
-  const formattedValue = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(value);
-
-  const changeClass = isPositive
-    ? "text-green-500 bg-green-500/10"
-    : "text-red-500 bg-red-500/10";
-  const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
-
-  return (
-    <div className="p-5 bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col justify-between h-full">
-      <div className="flex justify-between items-start mb-2">
-        <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-        <ArrowUpRight className="w-5 h-5 text-gray-400" />
-      </div>
-      <div className="text-3xl font-bold text-gray-900 mb-1">
-        {formattedValue.slice(0, -3)}
-        <span className="text-xl font-normal text-gray-600">
-          {formattedValue.slice(-3)}
-        </span>
-      </div>
-      <div className="flex items-center text-sm">
-        <div
-          className={`flex items-center px-2 py-0.5 rounded-full mr-2 ${changeClass}`}
-        >
-          <ChangeIcon className="w-3 h-3 mr-1" />
-          <span>{change}%</span>
-        </div>
-        <span className="text-gray-500">vs last month</span>
-      </div>
-    </div>
-  );
-};
+<div className="col-span-12 grid grid-cols-2 md:grid-cols-4 gap-6">
+  <StatCard title="Total Balance" Icon={Wallet} isPositive={true} />
+  <StatCard title="Income" Icon={TrendingUp} isPositive={true} />
+  <StatCard title="Expense" Icon={TrendingDown} isPositive={false} />
+</div>
 
 /**
  * Placeholder for the Money Flow Bar/Line Chart.
@@ -283,86 +257,7 @@ const MoneyFlowChartPlaceholder = ({ data }) => {
 /**
  * Placeholder for the Budget Doughnut Chart.
  */
-const BudgetChartPlaceholder = ({ data }) => {
-  const totalBudgeted = data.reduce((acc, item) => acc + item.amount, 0);
-  const totalValue = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(totalBudgeted);
 
-  const getDoughnutStyles = () => {
-    let totalPercent = 0;
-    let style = "";
-
-    data.forEach((item, index) => {
-      const percentage = (item.amount / totalBudgeted) * 100;
-      style += `${item.color} ${totalPercent}%, ${item.color} ${
-        totalPercent + percentage
-      }%, `;
-      totalPercent += percentage;
-    });
-
-    // Fallback for visual effect, using conic-gradient
-    return {
-      backgroundImage: `conic-gradient(${style.slice(0, -2)})`,
-    };
-  };
-
-  return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-900">Budget</h2>
-        <ArrowUpRight className="w-5 h-5 text-gray-400" />
-      </div>
-
-      <div className="flex items-center space-x-6">
-        {/* Chart Area */}
-        <div className="relative w-28 h-28 flex-shrink-0">
-          <div
-            className="absolute inset-0 rounded-full"
-            style={getDoughnutStyles()}
-          ></div>
-          {/* Inner white circle to create the "doughnut" effect */}
-          <div className="absolute inset-4 bg-white rounded-full flex items-center justify-center border-4 border-gray-50 shadow-inner">
-            <div className="text-center">
-              <p className="text-sm text-gray-500 leading-none">
-                Total for month
-              </p>
-              <p className="text-lg font-bold text-gray-900 leading-none mt-0.5">
-                {totalValue.replace("$", "")}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="flex-grow space-y-2">
-          {data.map((item, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between text-sm"
-            >
-              <span className="flex items-center text-gray-700 truncate">
-                <span
-                  className="w-2 h-2 rounded-full mr-2 flex-shrink-0"
-                  style={{ backgroundColor: item.color }}
-                ></span>
-                {item.category}
-              </span>
-              <span className="font-semibold text-gray-800">
-                {new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: "USD",
-                  minimumFractionDigits: 0,
-                }).format(item.amount)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 /**
  * Table for displaying recent transactions.
@@ -512,7 +407,7 @@ const App = () => {
   }
 
   // Destructure data for cleaner usage
-  const { summary, transactions, moneyFlow, budget, savingsGoals } = data;
+  const { summary, transactions, moneyFlow, budget, projectGoals } = data;
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 font-sans">
@@ -565,9 +460,7 @@ const App = () => {
           <MoneyFlowChartPlaceholder data={moneyFlow} />
         </div>
 
-        <div className="col-span-12 lg:col-span-4 flex flex-col bg-white rounded-xl shadow-lg">
-          <BudgetChartPlaceholder data={budget} />
-        </div>
+     
 
         {/* TRANSACTIONS & SAVING GOALS ROW */}
         <div className="col-span-12 lg:col-span-8 flex flex-col bg-white rounded-xl shadow-lg">
@@ -582,22 +475,19 @@ const App = () => {
             <ArrowUpRight className="w-5 h-5 text-gray-400" />
           </div>
           <div className="space-y-4">
-            {savingsGoals.map((goal, index) => (
+            {projectGoals.map((goal, index) => (
               <div key={index} className="flex flex-col">
                 <p className="text-md font-medium text-gray-800 mb-1">
                   {goal.name}
                 </p>
                 <ProgressBar
-                  current={goal.current}
-                  goal={goal.goal}
-                  color={goal.color}
+                  current={goal.currentAmount}
+                  goal={goal.targetAmount}
+                  color={"#6366F1"}
                 />
               </div>
             ))}
           </div>
-          <button className="mt-4 w-full flex items-center justify-center text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition py-2 rounded-lg text-sm font-medium">
-            <Plus className="w-4 h-4 mr-1" /> Add New Goal
-          </button>
         </div>
       </main>
     </div>

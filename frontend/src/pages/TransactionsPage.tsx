@@ -1,177 +1,20 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { Plus, Search, Eye, AlertCircle, Loader2 } from "lucide-react";
-import {
-  getExpenditures,
-  getExpenditureHeads,
-  getRevenueHeads,
-  getTransactions,
-} from "@/services/api";
-import type {
-  Account,
-  Transaction,
-  Expenditure,
-  RevenueHead,
-  ExpenditureHead,
-} from "@/utils/Types";
-
+import React, { useState, useMemo } from "react";
+import { Plus, Search, Eye, AlertCircle, Loader2, ArrowUpCircle, ArrowDownCircle, Wallet } from "lucide-react";
+import type { Account } from "@/utils/Types";
 import AccountDetailModal from "@/components/ledger";
+import useAccountsData from "@/hooks";
 
 // --- Constants ---
-const ACCOUNT_TYPES = [
-  "All Accounts",
-  "Income Accounts",
-  "Expense Accounts",
-] as const;
+const ACCOUNT_TYPES = ["All Accounts", "Income Accounts", "Expense Accounts"] as const;
 type AccountType = (typeof ACCOUNT_TYPES)[number];
 
-// --- Custom Hooks ---
-const useAccountsData = () => {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [
-        transactionsRes,
-        revenueHeads,
-        expendituresRes,
-        expenditureHeadsRes,
-      ] = await Promise.all([
-        getTransactions(),
-        getRevenueHeads(),
-        getExpenditures({ limit: 100, offset: 0 }),
-        getExpenditureHeads(),
-      ]);
-
-      // Validate responses
-      if (
-        !transactionsRes?.transactions ||
-        !revenueHeads ||
-        !expendituresRes?.expenditures ||
-        !expenditureHeadsRes
-      ) {
-        throw new Error("Invalid API response structure");
-      }
-
-      // Merge transactions with revenue head names
-      const mergedTransactions = transactionsRes.transactions.map((tx) => {
-        const head = revenueHeads.find(
-          (h: RevenueHead) => h.code === tx.revenueHeadCode
-        );
-        return {
-          ...tx,
-          revenueHeadName: head?.name || "Unknown",
-        };
-      });
-
-      // Merge expenditures with expenditure head names
-      const mergedExpenditures = expendituresRes.expenditures.map(
-        (exp: Expenditure) => {
-          const head = expenditureHeadsRes.find(
-            (h: ExpenditureHead) => h.code === exp.expenditureHeadCode
-          );
-          return {
-            ...exp,
-            expenditureHeadName: head?.name || "Unknown",
-          };
-        }
-      );
-
-      // Create income accounts from revenue heads
-      const incomeAccounts: Account[] = revenueHeads.map(
-        (head: RevenueHead) => {
-          const accountTransactions = mergedTransactions.filter(
-            (tx) => tx.revenueHeadCode === head.code
-          );
-
-          const balance = accountTransactions.reduce(
-            (sum, tx) => sum + (parseFloat(tx.amount) || 0),
-            0
-          );
-
-          return {
-            id: `income-${head.code}`,
-            accountName: head.name,
-            balance,
-            debitBalance: balance,
-            creditBalance: undefined,
-            transactions: accountTransactions,
-            type: "income" as const,
-          };
-        }
-      );
-
-      // Create expense accounts from expenditure heads
-      const expenseAccounts: Account[] = expenditureHeadsRes.map(
-        (head: ExpenditureHead) => {
-          const accountExpenditures = mergedExpenditures.filter(
-            (exp) => exp.expenditureHeadCode === head.code
-          );
-
-          const balance = accountExpenditures.reduce(
-            (sum, exp) =>
-              sum + (parseFloat(exp.totalAmount ?? exp.amount) || 0),
-            0
-          );
-
-          return {
-            id: `expense-${head.code}`,
-            accountName: head.name,
-            balance: -balance, // Negative balance for expenses
-            debitBalance: undefined,
-            creditBalance: balance,
-            expenditures: accountExpenditures,
-            type: "expense" as const,
-          };
-        }
-      );
-
-      const allAccounts = [...incomeAccounts, ...expenseAccounts];
-
-      setAccounts(allAccounts);
-      setExpenditures(mergedExpenditures);
-      setTransactions(mergedTransactions);
-    } catch (err) {
-      console.error("Error fetching accounts data:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  return {
-    accounts,
-    expenditures,
-    transactions,
-    loading,
-    error,
-    refetch: fetchData,
-  };
-};
-
-
 // --- Helper Functions ---
-const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat("en-US", {
+const formatCurrency = (amount: number): string =>
+  new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
   }).format(amount);
-};
 
 const getBalanceClass = (balance: number): string => {
   if (balance > 0) return "text-green-600 font-semibold";
@@ -187,15 +30,10 @@ const LoadingState: React.FC = () => (
   </div>
 );
 
-const ErrorState: React.FC<{ error: string; onRetry: () => void }> = ({
-  error,
-  onRetry,
-}) => (
+const ErrorState: React.FC<{ error: string; onRetry: () => void }> = ({ error, onRetry }) => (
   <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
     <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-    <h3 className="text-lg font-semibold text-red-800 mb-2">
-      Error Loading Accounts
-    </h3>
+    <h3 className="text-lg font-semibold text-red-800 mb-2">Error Loading Accounts</h3>
     <p className="text-red-600 mb-4">{error}</p>
     <button
       onClick={onRetry}
@@ -206,10 +44,10 @@ const ErrorState: React.FC<{ error: string; onRetry: () => void }> = ({
   </div>
 );
 
-const SearchBar: React.FC<{
-  searchTerm: string;
-  onSearchChange: (value: string) => void;
-}> = ({ searchTerm, onSearchChange }) => (
+const SearchBar: React.FC<{ searchTerm: string; onSearchChange: (value: string) => void }> = ({
+  searchTerm,
+  onSearchChange,
+}) => (
   <div className="mb-6">
     <div className="relative">
       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -224,10 +62,10 @@ const SearchBar: React.FC<{
   </div>
 );
 
-const AccountTabs: React.FC<{
-  activeTab: AccountType;
-  onTabChange: (tab: AccountType) => void;
-}> = ({ activeTab, onTabChange }) => (
+const AccountTabs: React.FC<{ activeTab: AccountType; onTabChange: (tab: AccountType) => void }> = ({
+  activeTab,
+  onTabChange,
+}) => (
   <div className="flex space-x-4 border-b border-gray-200 mb-6">
     {ACCOUNT_TYPES.map((tab) => (
       <button
@@ -250,7 +88,16 @@ const AccountTabs: React.FC<{
 export default function AccountsPage() {
   const [activeTab, setActiveTab] = useState<AccountType>("All Accounts");
   const [searchTerm, setSearchTerm] = useState("");
-  const { accounts, loading, error, refetch } = useAccountsData();
+  const {
+    accounts,
+    loading,
+    error,
+    refetch,
+    totalIncomeBalance,
+    totalExpenseBalance,
+    totalBalance,
+  } = useAccountsData();
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
@@ -262,20 +109,18 @@ export default function AccountsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedAccount(null);
-};
+  };
 
-  // Filter accounts based on active tab and search term
+  // ✅ Filter accounts based on tab and search
   const filteredAccounts = useMemo(() => {
     let filtered = accounts;
 
-    // Filter by account type
     if (activeTab === "Income Accounts") {
       filtered = filtered.filter((account) => account.type === "income");
     } else if (activeTab === "Expense Accounts") {
       filtered = filtered.filter((account) => account.type === "expense");
     }
 
-    // Filter by search term
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((account) =>
@@ -290,24 +135,65 @@ export default function AccountsPage() {
   if (error) return <ErrorState error={error} onRetry={refetch} />;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 ">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header and Action Button */}
+        {/* Header */}
         <header className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-extrabold text-gray-900">Accounts</h1>
+          <h1 className="text-3xl font-extrabold text-gray-900">Accounts Overview</h1>
         </header>
 
-        <AccountTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        {/* ✅ Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white p-6 rounded-xl shadow flex items-center space-x-4">
+            <div className="bg-green-100 p-3 rounded-full">
+              <ArrowUpCircle className="text-green-600 w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm text-gray-500">Total Income</div>
+              <div className="text-2xl font-bold text-green-700">
+                {formatCurrency(totalIncomeBalance)}
+              </div>
+            </div>
+          </div>
 
+          <div className="bg-white p-6 rounded-xl shadow flex items-center space-x-4">
+            <div className="bg-red-100 p-3 rounded-full">
+              <ArrowDownCircle className="text-red-600 w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm text-gray-500">Total Expenses</div>
+              <div className="text-2xl font-bold text-red-700">
+                {formatCurrency(totalExpenseBalance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow flex items-center space-x-4">
+            <div className="bg-blue-100 p-3 rounded-full">
+              <Wallet className="text-blue-600 w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm text-gray-500">Net Balance</div>
+              <div
+                className={`text-2xl font-bold ${
+                  totalBalance >= 0 ? "text-blue-700" : "text-red-600"
+                }`}
+              >
+                {formatCurrency(totalBalance)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs & Search */}
+        <AccountTabs activeTab={activeTab} onTabChange={setActiveTab} />
         <SearchBar searchTerm={searchTerm} onSearchChange={setSearchTerm} />
 
-        {/* Accounts Table */}
+        {/* ✅ Accounts Table */}
         <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
           {filteredAccounts.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              {searchTerm
-                ? "No accounts match your search."
-                : "No accounts found."}
+              {searchTerm ? "No accounts match your search." : "No accounts found."}
             </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200">
@@ -329,10 +215,7 @@ export default function AccountsPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredAccounts.map((account) => (
-                  <tr
-                    key={account.id}
-                    className="hover:bg-gray-50 transition duration-150"
-                  >
+                  <tr key={account.id} className="hover:bg-gray-50 transition duration-150">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {account.accountName}
                     </td>
@@ -367,31 +250,8 @@ export default function AccountsPage() {
           )}
         </div>
 
-        {/* Summary Stats */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">Total Accounts</div>
-            <div className="text-2xl font-bold">{filteredAccounts.length}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">Total Balance</div>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(
-                filteredAccounts.reduce((sum, acc) => sum + acc.balance, 0)
-              )}
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-500">Active Tab</div>
-            <div className="text-2xl font-bold text-blue-600">{activeTab}</div>
-          </div>
-        </div>
-
-        <AccountDetailModal
-          account={selectedAccount}
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-        />
+        {/* Modal */}
+        <AccountDetailModal account={selectedAccount} isOpen={isModalOpen} onClose={handleCloseModal} />
       </div>
     </div>
   );
