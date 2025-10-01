@@ -2185,6 +2185,9 @@ app.post(
       value.ageCategory = calculateAgeCategory(value.dateOfBirth);
     }
 
+    // if any value is empty and user tries to create a user
+
+dateOfBirth
     const newMember = await prisma.member.create({
       data: value,
       include: {
@@ -2269,6 +2272,8 @@ app.get(
       }),
       prisma.member.count({ where: whereClause }),
     ]);
+
+    console.log("got the following members:", members);
 
     res.status(200).json({
       total,
@@ -2438,7 +2443,6 @@ app.delete(
 // --- PROJECT MANAGEMENT ROUTES ---
 
 // Create Project
-
 app.post(
   "/api/projects",
   authenticateToken,
@@ -2456,64 +2460,47 @@ app.post(
     if (!branchExists) throw new NotFoundError("Branch not found.");
     if (!currencyExists) throw new NotFoundError("Currency not found.");
 
-    // Use transaction to ensure both project and revenue head are created together
-    const result = await prisma.$transaction(async (tx) => {
-      // First, create the project
-      const newProject = await tx.project.create({
-        data: value,
-      });
+    // Generate revenue head code and name first
+    const revenueHeadName = `Project - ${value.name}`;
+    
+    // Check if revenue head with this name already exists for the branch
+    const existingHead = await prisma.revenueHead.findFirst({
+      where: {
+        name: revenueHeadName,
+        branchCode: value.branchCode,
+      },
+    });
 
-      // Generate revenue head name and code for the project
-      const revenueHeadName = `Project - ${newProject.name}`;
+    if (existingHead) {
+      throw new ConflictError("Revenue head for this project already exists.");
+    }
 
-      // Check if revenue head with this name already exists for the branch
-      const existingHead = await tx.revenueHead.findFirst({
-        where: {
-          name: revenueHeadName,
-          branchCode: value.branchCode,
-        },
-      });
+    // Generate a unique revenue head code
+    const timestamp = Date.now();
+    const revenueHeadCode = `PROJ-${value.branchCode}-${timestamp}`;
 
-      if (existingHead) {
-        throw new ConflictError(
-          "Revenue head for this project already exists."
-        );
-      }
+    // Create the revenue head first
+    const projectRevenueHead = await prisma.revenueHead.create({
+      data: {
+        code: revenueHeadCode,
+        name: revenueHeadName,
+        branchCode: value.branchCode,
+        description: `Revenue head for project: ${value.name}`,
+        isActive: value.isActive !== undefined ? value.isActive : true,
+      },
+    });
 
-      // FIXED: Generate unique revenue head code using project ID
-      const revenueHeadCode = `PROJ-${newProject.id}`;
-
-      // Alternative: If you prefer the branch-based format, use this approach:
-      // const revenueHeadCode = await generateUniqueRevenueHeadCode(tx, value.branchCode);
-
-      // Create the revenue head for the project
-      const projectRevenueHead = await tx.revenueHead.create({
-        data: {
-          code: revenueHeadCode,
-          name: revenueHeadName,
-          branchCode: value.branchCode,
-          description: `Revenue head for project: ${newProject.name}`,
-          isActive: newProject.isActive,
-        },
-      });
-
-      // Link the revenue head to the project
-      const updatedProject = await tx.project.update({
-        where: { id: newProject.id },
-        data: {
-          revenueHeadCode: projectRevenueHead.code,
-        },
-        include: {
-          branch: { select: { name: true } },
-          currency: { select: { name: true, symbol: true } },
-          revenueHead: true,
-        },
-      });
-
-      return {
-        project: updatedProject,
-        revenueHead: projectRevenueHead,
-      };
+    // Now create the project with the revenue head code
+    const newProject = await prisma.project.create({
+      data: {
+        ...value,
+        revenueHeadCode: projectRevenueHead.code,
+      },
+      include: {
+        branch: { select: { name: true } },
+        currency: { select: { name: true, symbol: true } },
+        revenueHead: true,
+      },
     });
 
     // Log audit for project creation
@@ -2522,9 +2509,9 @@ app.post(
       req.user.username,
       "CREATE",
       "projects",
-      result.project.id,
+      newProject.id,
       null,
-      result.project,
+      newProject,
       req
     );
 
@@ -2534,19 +2521,22 @@ app.post(
       req.user.username,
       "CREATE",
       "revenue_heads",
-      result.revenueHead.code,
+      projectRevenueHead.code,
       null,
-      result.revenueHead,
+      projectRevenueHead,
       req
     );
 
     res.status(201).json({
       message: "Project created successfully with revenue head.",
-      project: result.project,
-      revenueHead: result.revenueHead,
+      project: newProject,
+      revenueHead: projectRevenueHead,
     });
   })
 );
+
+
+
 // Get Projects
 app.get(
   "/api/projects",
@@ -3008,38 +2998,34 @@ app.post(
     if (!currency) throw new NotFoundError("Currency not found.");
     if (!paymentMethod) throw new NotFoundError("Payment method not found.");
 
-    const transaction = await prisma.$transaction(async (tx) => {
-      const receiptNumber = await generateReceiptNumber(
-        "transaction",
-        member.branchCode,
-        tx
-      );
+    // Generate receipt number without transaction
+    const receiptNumber = await generateReceiptNumberSimple(prisma, member.branchCode);
 
-      return tx.transaction.create({
-        data: {
-          receiptNumber,
-          memberId,
-          revenueHeadCode,
-          amount: new Prisma.Decimal(amount),
-          currencyCode,
-          paymentMethodId,
-          referenceNumber,
-          branchCode: member.branchCode,
-          transactionDate: new Date(transactionDate),
-          userId: req.user.id,
-          notes,
-          status: "completed",
+    // Create transaction directly
+    const transaction = await prisma.transaction.create({
+      data: {
+        receiptNumber,
+        memberId,
+        revenueHeadCode,
+        amount: new Prisma.Decimal(amount),
+        currencyCode,
+        paymentMethodId,
+        referenceNumber,
+        branchCode: member.branchCode,
+        transactionDate: new Date(transactionDate),
+        userId: req.user.id,
+        notes,
+        status: "completed",
+      },
+      include: {
+        member: {
+          select: { memberNumber: true, firstName: true, lastName: true },
         },
-        include: {
-          member: {
-            select: { memberNumber: true, firstName: true, lastName: true },
-          },
-          revenueHead: { select: { name: true } },
-          user: { select: { username: true } },
-          currency: { select: { code: true, symbol: true } },
-          paymentMethod: { select: { name: true } },
-        },
-      });
+        revenueHead: { select: { name: true } },
+        user: { select: { username: true } },
+        currency: { select: { code: true, symbol: true } },
+        paymentMethod: { select: { name: true } },
+      },
     });
 
     await logAudit(
@@ -3061,6 +3047,32 @@ app.post(
   })
 );
 
+// Simple receipt number generator without transaction
+async function generateReceiptNumberSimple(prismaClient, branchCode) {
+  const prefix = "RC";
+  const year = new Date().getFullYear().toString().slice(-2);
+  const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
+  
+  // Use timestamp + random for uniqueness
+  const timestamp = Date.now().toString().slice(-8);
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  
+  const receiptNumber = `${prefix}${branchCode}${year}${month}${timestamp}${random}`;
+  
+  // Quick verification (optional)
+  const existing = await prismaClient.transaction.findUnique({
+    where: { receiptNumber },
+    select: { id: true }
+  });
+  
+  if (existing) {
+    // If by chance it exists, append more randomness
+    const extraRandom = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${receiptNumber}${extraRandom}`;
+  }
+  
+  return receiptNumber;
+}
 // Record Member Contribution
 app.post(
   "/api/contributions",
