@@ -20,6 +20,52 @@ export default function App() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [showToast, setShowToast] = useState({ message: "", type: "" });
+  const [formErrors, setFormErrors] = useState({});
+
+
+  const validateMember = (memberData) => {
+  const errors = {};
+
+  // First Name
+  if (!memberData.firstName || memberData.firstName.trim().length < 2) {
+    errors.firstName = "First name must be at least 2 characters.";
+  } else if (!/^[a-zA-Z]+$/.test(memberData.firstName)) {
+    errors.firstName = "First name must contain only letters.";
+  }
+
+  // Last Name
+  if (!memberData.lastName || memberData.lastName.trim().length < 2) {
+    errors.lastName = "Last name must be at least 2 characters.";
+  } else if (!/^[a-zA-Z]+$/.test(memberData.lastName)) {
+    errors.lastName = "Last name must contain only letters.";
+  }
+
+  // Member Number
+  if (!memberData.memberNumber || memberData.memberNumber.trim().length < 4) {
+    errors.memberNumber = "Member number must be at least 4 characters.";
+  } else if (!/^\d+$/.test(memberData.memberNumber)) {
+    errors.memberNumber = "Member number must be numeric.";
+  }
+
+  // Branch Code
+  if (!memberData.branchCode || memberData.branchCode.trim().length < 2) {
+    errors.branchCode = "Branch code must be at least 2 characters.";
+  }
+
+  // Email (optional, if present)
+  if (memberData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberData.email)) {
+    errors.email = "Invalid email address.";
+  }
+
+  // Phone (optional, if present)
+  if (memberData.phone && !/^\+?\d{7,15}$/.test(memberData.phone)) {
+    errors.phone = "Invalid phone number.";
+  }
+
+  return errors;
+};
+
+
 
   const [currentPage, setCurrentPage] = useState(1);
   const membersPerPage = 8;
@@ -40,6 +86,7 @@ export default function App() {
     setIsLoading(true);
     try {
       const data = await getMembers();
+      console.log("API response:", data);
       console.log("Fetched members:", data.members);
       setMembers(data.members);
     } catch (err) {
@@ -85,19 +132,28 @@ export default function App() {
     }
   };
 
-  const handleCreateMember = async (memberData) => {
-    setIsLoading(true);
-    try {
-      await createMember(memberData);
-      await fetchMembers();
-      toast.success("Member created successfully");
-      handleCloseModal();
-    } catch (err) {
-      console.error("Failed to create member:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const handleCreateMember = async (memberData) => {
+  const errors = validateMember(memberData);
+  setFormErrors(errors);
+
+  if (Object.keys(errors).length > 0) {
+    toast.error("Please fix validation errors before submitting.");
+    return;
+  }
+
+  setIsLoading(true);
+  try {
+    await createMember(memberData);
+    await fetchMembers();
+    toast.success("Member created successfully");
+    handleCloseModal();
+    setFormErrors({});
+  } catch (err) {
+    console.error("Failed to create member:", err);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-100 font-[Inter] antialiased relative">
@@ -162,7 +218,7 @@ export default function App() {
                             {member.memberNumber}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {member.branchCode}
+                            {member.branch.name}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end gap-2">
@@ -232,6 +288,7 @@ export default function App() {
         <MemberFormModal
           onClose={handleCloseModal}
           onCreate={handleCreateMember}
+           errors={formErrors}
         />
       )}
 

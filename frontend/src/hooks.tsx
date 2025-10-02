@@ -4,6 +4,7 @@ import {
   getExpenditureHeads,
   getRevenueHeads,
   getTransactions,
+  getMembers, // <-- ADDED: Assuming this function exists in "@/services/api"
 } from "@/services/api";
 import type {
   Account,
@@ -11,7 +12,18 @@ import type {
   Expenditure,
   RevenueHead,
   ExpenditureHead,
+  // ADDED: Mock Member type for demonstration
+  Member, 
 } from "@/utils/Types";
+
+// If Member type isn't defined in Types.ts, you might need a definition like this:
+// type Member = {
+//   id: string;
+//   firstName: string;
+//   lastName: string;
+//   joinDate: string;
+// };
+
 
 // --- Constants ---
 const ACCOUNT_TYPES = [
@@ -26,6 +38,7 @@ const useAccountsData = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [members, setMembers] = useState<Member[]>([]); // <-- ADDED: New state for members
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,11 +52,13 @@ const useAccountsData = () => {
         revenueHeads,
         expendituresRes,
         expenditureHeadsRes,
+        membersRes, // <-- ADDED: Result for members
       ] = await Promise.all([
         getTransactions(),
         getRevenueHeads(),
         getExpenditures({ limit: 100, offset: 0 }),
         getExpenditureHeads(),
+        getMembers(), // <-- ADDED: New API call
       ]);
 
       // Validate responses
@@ -51,10 +66,15 @@ const useAccountsData = () => {
         !transactionsRes?.transactions ||
         !revenueHeads ||
         !expendituresRes?.expenditures ||
-        !expenditureHeadsRes
+        !expenditureHeadsRes ||
+        !membersRes?.members // <-- ADDED: Validation for members response structure
       ) {
         throw new Error("Invalid API response structure");
       }
+
+      // ------------------------------------
+      // Financial Data Processing (Unchanged)
+      // ------------------------------------
 
       // Merge transactions with revenue head names
       const mergedTransactions = transactionsRes.transactions.map((tx) => {
@@ -87,7 +107,7 @@ const useAccountsData = () => {
         );
 
         const balance = accountTransactions.reduce(
-          (sum, tx) => sum + (parseFloat(tx.amount) || 0),
+          (sum, tx) => sum + (parseFloat(String(tx.amount)) || 0),
           0
         );
 
@@ -110,7 +130,7 @@ const useAccountsData = () => {
 
           const balance = accountExpenditures.reduce(
             (sum, exp) =>
-              sum + (parseFloat(exp.totalAmount ?? exp.amount) || 0),
+              sum + (parseFloat(String(exp.totalAmount ?? exp.amount)) || 0),
             0
           );
 
@@ -127,9 +147,13 @@ const useAccountsData = () => {
 
       const allAccounts = [...incomeAccounts, ...expenseAccounts];
 
+      // ------------------------------------
+      // Set State
+      // ------------------------------------
       setAccounts(allAccounts);
       setExpenditures(mergedExpenditures);
       setTransactions(mergedTransactions);
+      setMembers(membersRes.members); // <-- ADDED: Setting members state
     } catch (err) {
       console.error("Error fetching accounts data:", err);
       setError(
@@ -144,7 +168,7 @@ const useAccountsData = () => {
     fetchData();
   }, [fetchData]);
 
-  // ✅ Compute total balances using useMemo for efficiency
+  // ✅ Compute total balances using useMemo for efficiency (Unchanged)
   const { totalIncomeBalance, totalExpenseBalance, totalBalance } = useMemo(() => {
     const income = accounts
       .filter((acc) => acc.type === "income")
@@ -167,6 +191,7 @@ const useAccountsData = () => {
     accounts,
     expenditures,
     transactions,
+    members, // <-- ADDED: Returning members
     loading,
     error,
     refetch: fetchData,

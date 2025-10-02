@@ -4,7 +4,7 @@ import { X, User } from 'lucide-react';
 import { getBranches } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
-const MemberFormModal = ({ member, onClose, onCreate, onUpdate, isLoading }) => {
+const MemberFormModal = ({ member, onClose, onCreate, onUpdate, isLoading, errors: externalErrors }) => {
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -20,7 +20,13 @@ const MemberFormModal = ({ member, onClose, onCreate, onUpdate, isLoading }) => 
       
     });
 
-    const [errors, setErrors] = useState({});
+   const [errors, setErrors] = useState({});
+
+    useEffect(() => {
+        if (externalErrors && Object.keys(externalErrors).length > 0) {
+            setErrors(externalErrors);
+        }
+    }, [externalErrors]);
 
     // Fetch branches
     const { data: branches = [], isLoading: isLoadingBranches } = useQuery({

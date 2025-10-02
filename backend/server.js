@@ -1490,6 +1490,7 @@ app.post(
 );
 
 // Logout
+
 app.post(
   "/api/logout",
   authenticateToken,

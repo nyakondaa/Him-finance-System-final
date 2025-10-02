@@ -404,28 +404,23 @@ const ProjectBoardPage = ({ showModal }) => {
       </div>
       
       {/* Modal */}
-      {isProjectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={handleCloseModal}
-          />
-          <ProjectFormModal
-            isOpen={isProjectModalOpen}
-            onClose={handleCloseModal}
-            onCreate={(data) => {
-              if (currentProject) {
-                updateProjectMutation.mutate({ id: currentProject.id, data });
-              } else {
-                createProjectMutation.mutate(data);
-              }
-            }}
-            project={currentProject}
-            branches={branches}
-            currencies={currencies}
-          />
-        </div>
-      )}
+{isProjectModalOpen && (
+  <ProjectFormModal
+    isOpen={isProjectModalOpen}
+    onClose={handleCloseModal}
+    onCreate={(data) => {
+      if (currentProject) {
+        updateProjectMutation.mutate({ id: currentProject.id, data });
+      } else {
+        createProjectMutation.mutate(data);
+      }
+    }}
+    project={currentProject}
+    branches={branches}
+    currencies={currencies}
+    isLoading={createProjectMutation.isLoading || updateProjectMutation.isLoading}
+  />
+)}
     </div>
   );
 };
