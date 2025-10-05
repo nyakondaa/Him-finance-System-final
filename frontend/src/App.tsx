@@ -34,7 +34,7 @@ export default function App() {
                     <Route path="/" element={<DashboardLayout />}>
                         <Route index element={<DashboardPage showModal={showModal} />} />
                         <Route path="users" element={<UserManagementPage showModal={showModal} />} />
-                        <Route path="members" element={<MembersPage  />} />
+                        <Route path="members" element={<MembersPage showModal={showModal} />} />
                         {/* The ExpensesPage no longer requires showModal as the table and modal logic were removed. */}
                         <Route path="expenses" element={<ExpensesPage />} />
                         <Route path="revenue-heads" element={<RevenueHeadsPage showModal={showModal} />} />

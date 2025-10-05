@@ -335,43 +335,65 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({
     return "";
   };
 
-  const handleCreateUser = () => {
-    const error = validatePassword(newUser.password || "");
+// In your UserManagementPage component, update the handleCreateUser and handleUpdateUser functions:
+
+const handleCreateUser = () => {
+  const error = validatePassword(newUser.password || "");
+  if (error) {
+    setPasswordError(error);
+    return;
+  }
+
+  // Find the branch ID from the branch name
+  const selectedBranch = branches.find(branch => branch.branchName === newUser.branch);
+  if (!selectedBranch) {
+    showModal("Please select a valid branch.", "Error");
+    return;
+  }
+
+  const userData = {
+    ...newUser,
+    branchId: selectedBranch.id, // Send branchId instead of branch name
+    roles: newUser.roles // This should already be an array of role names
+  };
+
+  createUserMutation.mutate(userData as any);
+};
+
+const handleUpdateUser = () => {
+  if (!editingUser) return;
+
+  // Find the branch ID from the branch name
+  const selectedBranch = branches.find(branch => branch.branchName === editingUser.branch);
+  if (!selectedBranch) {
+    showModal("Please select a valid branch.", "Error");
+    return;
+  }
+
+  const updateData: any = {
+    username: editingUser.username,
+    email: editingUser.email,
+    firstName: editingUser.firstName,
+    lastName: editingUser.lastName,
+    phoneNumber: editingUser.phoneNumber || "",
+    roles: editingUser.roles,
+    branchId: selectedBranch.id, // Send branchId instead of branch name
+  };
+
+  if (editingUser.password && editingUser.password.trim() !== "") {
+    const error = validatePassword(editingUser.password);
     if (error) {
       setPasswordError(error);
       return;
     }
+    updateData.password = editingUser.password;
+  }
 
-    createUserMutation.mutate(newUser as any);
-  };
-
-  const handleUpdateUser = () => {
-    if (!editingUser) return;
-
-    const updateData: Partial<UserFormState> = {
-      username: editingUser.username,
-      email: editingUser.email,
-      firstName: editingUser.firstName,
-      lastName: editingUser.lastName,
-      phoneNumber: editingUser.phoneNumber || "",
-      roles: editingUser.roles,
-      branch: editingUser.branch,
-    };
-
-    if (editingUser.password && editingUser.password.trim() !== "") {
-      const error = validatePassword(editingUser.password);
-      if (error) {
-        setPasswordError(error);
-        return;
-      }
-      updateData.password = editingUser.password;
-    }
-
-    updateUserMutation.mutate({
-      id: editingUser.id,
-      data: updateData,
-    });
-  };
+  updateUserMutation.mutate({
+    id: editingUser.id,
+    data: updateData,
+  });
+};
 
   const handleToggleUserLock = (userId: number, currentLockedStatus: boolean) => {
     if (currentLockedStatus) {
@@ -445,7 +467,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({
           User management
         </h1>
         <p className="text-gray-600">
-          Manage your team members and their account permissions here.
+          Manage Users and their account permissions here.
         </p>
       </div>
 

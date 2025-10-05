@@ -1,21 +1,26 @@
 import { Outlet } from 'react-router-dom';
-import Navbar from '../components/Navbar'; // The sidebar navigation
+import Navbar from '../components/Navbar';
+import { useState } from 'react';
 
 const DashboardLayout = () => {
-  return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className="w-64 h-full fixed left-0 top-0 bg-[#111827]">
-        <Navbar />
-      </div>
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-      {/* Main content */}
-      <main className="flex-1 ml-64 overflow-auto bg-white">
-        <Outlet />
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Navbar handles its own width and collapsing */}
+      <Navbar onCollapseChange={setIsSidebarCollapsed} />
+      
+      {/* Main content - dynamically adjusts based on sidebar state */}
+      <main className={`
+        flex-1 overflow-auto bg-gray-50 transition-all duration-300 ease-in-out
+        ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-80'}
+      `}>
+        <div className="p-6">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
 };
 
 export default DashboardLayout;
-

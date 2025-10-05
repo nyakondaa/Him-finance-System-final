@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
     Users,
     DollarSign,
@@ -15,101 +15,146 @@ import {
     ChevronLeft,
     CreditCard,
     Trello,
-    TrendingUp
+    Building,
+    Shield,
+    BarChart3
 } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
-import './Navbar.css';
 
-const NavItem = ({ to, icon, text, onClick, isCollapsed }) => (
+const NavItem = ({ to, icon, text, onClick, isCollapsed, isActive }) => (
     <NavLink
         to={to}
         onClick={onClick}
-        className={({ isActive }) =>
-            `flex items-center gap-4 p-3 rounded-lg transition-all duration-300
-            ${isActive
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-gray-300 hover:bg-gray-700/50 hover:text-white'}
+        className={({ isActive: navIsActive }) =>
+            `flex items-center gap-3 p-3 rounded-lg transition-all duration-200 group relative
+            ${navIsActive || isActive
+                ? 'bg-white text-blue-600 shadow-sm border border-blue-100'
+                : 'text-gray-600 hover:bg-white/80 hover:text-gray-900'}
             ${isCollapsed ? 'justify-center' : ''}`
         }
     >
-        <span className="flex-shrink-0">{icon}</span>
-        {!isCollapsed && <span className="font-medium text-sm">{text}</span>}
+        <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}`}>
+            {icon}
+        </span>
+        {!isCollapsed && (
+            <span className="font-medium text-sm transition-colors">
+                {text}
+            </span>
+        )}
+        {isCollapsed && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 shadow-lg">
+                {text}
+                <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-gray-800"></div>
+            </div>
+        )}
     </NavLink>
 );
 
 const UserInfoCard = ({ currentUser, isCollapsed }) => (
-    <div className={`p-4 bg-gray-700/30 rounded-xl transition-all duration-300 ${isCollapsed ? 'hidden' : 'block'}`}>
+    <div className={`p-4 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-300 ${isCollapsed ? 'px-3' : ''}`}>
         <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
                 <User className="w-5 h-5 text-white" />
             </div>
-            <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-white truncate">{currentUser.username}</p>
-                <p className="text-xs text-blue-300 uppercase tracking-wide">{currentUser.role}</p>
-            </div>
+            {!isCollapsed && (
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                        {currentUser.username}
+                    </p>
+                    <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">
+                        {currentUser.role}
+                    </p>
+                    {currentUser.branch && (
+                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <Building className="w-3 h-3" />
+                            {currentUser.branch}
+                        </p>
+                    )}
+                </div>
+            )}
         </div>
-        {currentUser.branch && (
-            <p className="text-xs text-gray-400 mt-2 border-t border-gray-600 pt-2">
-                <span className="text-gray-500">Branch:</span> {currentUser.branch}
-            </p>
-        )}
     </div>
 );
 
-const Navbar = () => {
+const Navbar = ({ onCollapseChange }) => {
     const { currentUser, handleLogout } = useAuth();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const location = useLocation();
 
     if (!currentUser) return null;
 
     const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
     const closeMobileMenu = () => setIsMobileMenuOpen(false);
-    const toggleCollapse = () => setIsCollapsed(!isCollapsed);
+    
+    const toggleCollapse = () => {
+        const newCollapsedState = !isCollapsed;
+        setIsCollapsed(newCollapsedState);
+        // Notify parent component about collapse state change
+        if (onCollapseChange) {
+            onCollapseChange(newCollapsedState);
+        }
+    };
 
     const navigationItems = [
         { to: "/", icon: <Home className="w-5 h-5" />, text: "Dashboard" },
         { to: "/receipting", icon: <Receipt className="w-5 h-5" />, text: "Payments" },
-        { to: "/reports", icon: <FileText className="w-5 h-5" />, text: "Reports" },
+        { to: "/reports", icon: <BarChart3 className="w-5 h-5" />, text: "Reports" },
         { to: "/transactions", icon: <Banknote className="w-5 h-5" />, text: "Accounts" },
     ];
 
     const adminItems = [
         { to: "/users", icon: <Users className="w-5 h-5" />, text: "User Management" },
-        
-          { to: "/Expenses", icon: <DollarSign className="w-5 h-5" />, text: "Expenses " },
-
-      
         { to: "/members", icon: <User className="w-5 h-5" />, text: "Members" },
-        { to: "/payment-management", icon: <CreditCard className="w-5 h-5" />, text: "Payment Management" },
-        
-        { to: "/project-board", icon: <Trello className="w-5 h-5" />, text: "Project Board" },
-        { to: "/settings", icon: <Settings className="w-5 h-5" />, text: "System Settings" },
-        
+        { to: "/expenses", icon: <DollarSign className="w-5 h-5" />, text: "Expenses" },
+        { to: "/payment-management", icon: <CreditCard className="w-5 h-5" />, text: "Payments" },
+        { to: "/project-board", icon: <Trello className="w-5 h-5" />, text: "Projects" },
+        { to: "/settings", icon: <Settings className="w-5 h-5" />, text: "Settings" },
     ];
-     {/* { to: "/expenditure-heads", icon: <Banknote className="w-5 h-5" />, text: "Expenditure Heads" },
-        
-        { to: "/revenue-heads", icon: <DollarSign className="w-5 h-5" />, text: "Revenue Heads" },
-         
-        */} 
 
-     const role = currentUser.role.toLowerCase();
+    const role = currentUser.role?.toLowerCase();
+    const isAdminOrSupervisor = role === 'admin' || role === 'supervisor';
 
-    const isAdminOrSupervisor = role=== 'admin' || role=== 'supervisor';
-    console.log(`coming from the navbar ${currentUser.role}`)
-
-    if (isAdminOrSupervisor){
-        console.log(isAdminOrSupervisor)
-    }
-
-    const renderNavContent = (isMobile) => (
+    const renderNavContent = (isMobile = false) => (
         <>
-            <div className="p-4 border-b border-gray-700 flex-shrink-0">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200 flex-shrink-0 bg-white/50">
+                {!isMobile && (
+                    <div className="flex items-center justify-between">
+                        {!isCollapsed && (
+                            <div className="flex-1 min-w-0">
+                                <h1 className="text-xl font-bold text-gray-900 truncate">
+                                    HIM Admin
+                                </h1>
+                                <p className="text-xs text-gray-500 mt-1">Management System</p>
+                            </div>
+                        )}
+                        <button
+                            onClick={toggleCollapse}
+                            className={`p-2 rounded-lg transition-all duration-200 hover:bg-white text-gray-500 hover:text-gray-700 ${
+                                isCollapsed ? 'rotate-180' : ''
+                            }`}
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
+                {isMobile && (
+                    <div className="bg-white/50 rounded-lg p-4">
+                        <h1 className="text-xl font-bold text-gray-900">HIM Admin</h1>
+                        <p className="text-xs text-gray-500 mt-1">Management System</p>
+                    </div>
+                )}
+            </div>
+
+            {/* User Info */}
+            <div className="px-4 py-4 flex-shrink-0">
                 <UserInfoCard currentUser={currentUser} isCollapsed={isMobile ? false : isCollapsed} />
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-                <div className="space-y-2">
+            {/* Navigation Items */}
+            <div className="flex-1 overflow-y-auto px-4 space-y-2 py-2">
+                <div className="space-y-1">
                     {navigationItems.map((item) => (
                         <NavItem
                             key={item.to}
@@ -118,18 +163,24 @@ const Navbar = () => {
                             text={item.text}
                             onClick={isMobile ? closeMobileMenu : undefined}
                             isCollapsed={isMobile ? false : isCollapsed}
+                            isActive={location.pathname === item.to}
                         />
                     ))}
                 </div>
 
                 {isAdminOrSupervisor && (
                     <>
-                        <div className={`pt-4 ${isCollapsed && !isMobile ? 'hidden' : 'block'}`}>
-                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                                Administration
-                            </h3>
+                        <div className={`pt-6 pb-2 ${isCollapsed && !isMobile ? 'hidden' : 'block'}`}>
+                            <div className="flex items-center gap-2 px-2">
+                                <Shield className="w-4 h-4 text-gray-400" />
+                                {!isCollapsed && (
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        Administration
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                             {adminItems.map((item) => (
                                 <NavItem
                                     key={item.to}
@@ -138,6 +189,7 @@ const Navbar = () => {
                                     text={item.text}
                                     onClick={isMobile ? closeMobileMenu : undefined}
                                     isCollapsed={isMobile ? false : isCollapsed}
+                                    isActive={location.pathname === item.to}
                                 />
                             ))}
                         </div>
@@ -145,13 +197,16 @@ const Navbar = () => {
                 )}
             </div>
 
-            <div className="p-4 border-t border-gray-700 flex-shrink-0">
+            {/* Logout */}
+            <div className="p-4 border-t border-gray-200 flex-shrink-0 bg-white/50">
                 <button
                     onClick={() => {
                         handleLogout();
                         if (isMobile) closeMobileMenu();
                     }}
-                    className={`w-full flex items-center gap-4 p-3 rounded-lg text-red-400 hover:bg-red-600/20 hover:text-red-300 transition-all duration-300 ${isMobile || !isCollapsed ? '' : 'justify-center'}`}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-white hover:text-red-600 transition-all duration-200 ${
+                        isMobile || !isCollapsed ? '' : 'justify-center'
+                    }`}
                 >
                     <LogOut className="w-5 h-5 flex-shrink-0" />
                     {(!isCollapsed || isMobile) && <span className="font-medium text-sm">Logout</span>}
@@ -162,65 +217,40 @@ const Navbar = () => {
 
     return (
         <>
+            {/* Mobile Menu Button */}
             <button
                 onClick={toggleMobileMenu}
-                className="lg:hidden fixed top-4 left-4 z-50 p-2 text-white bg-gray-800 rounded-lg shadow-lg hover:bg-gray-700 transition-colors"
+                className="lg:hidden fixed top-6 left-6 z-50 p-2 text-gray-600 bg-white rounded-xl shadow-lg hover:bg-gray-50 border border-gray-200 transition-all duration-200"
             >
-                {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
+            {/* Mobile Overlay */}
             {isMobileMenuOpen && (
                 <div
-                    className="lg:hidden fixed inset-0 bg-black/50 z-40"
+                    className="lg:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
                     onClick={closeMobileMenu}
                 />
             )}
 
+            {/* Desktop Sidebar */}
             <aside className={`
-                hidden lg:flex flex-col bg-gray-900 text-white shadow-2xl border-r border-gray-800
-                transition-all duration-300 ease-in-out
-                ${isCollapsed ? 'w-[5rem]' : 'w-[16rem]'}
-                h-screen
+                hidden lg:flex flex-col bg-gray-50/80 text-gray-900 border-r border-gray-200
+                transition-all duration-300 ease-in-out backdrop-blur-sm
+                ${isCollapsed ? 'w-20' : 'w-80'}
+                h-screen fixed left-0 top-0
             `}>
                 <div className="flex flex-col h-full overflow-hidden">
-                    <div className="p-4 flex items-center justify-between border-b border-gray-700 flex-shrink-0">
-                        {!isCollapsed && (
-                            <div className="flex-1 min-w-0">
-                                <h1 className="text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent truncate">
-                                    HIM Admin
-                                </h1>
-                            </div>
-                        )}
-                        <button
-                            onClick={toggleCollapse}
-                            className={`p-2 rounded-lg transition-transform duration-300 ease-in-out hover:bg-gray-700 text-gray-400 hover:text-white ${isCollapsed ? 'rotate-180' : ''}`}
-                        >
-                            <ChevronLeft className="w-5 h-5" />
-                        </button>
-                    </div>
-
-                    {renderNavContent(false)}
+                    {renderNavContent()}
                 </div>
             </aside>
 
+            {/* Mobile Sidebar */}
             <aside className={`
-                lg:hidden fixed top-0 left-0 h-full w-64 bg-gray-900 text-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out
+                lg:hidden fixed top-0 left-0 h-full w-80 bg-gray-50/95 backdrop-blur-md shadow-xl z-50 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
                 <div className="flex flex-col h-full">
-                    <div className="p-4 flex items-center justify-between border-b border-gray-700 flex-shrink-0">
-                        <div>
-                            <h1 className="text-2xl font-extrabold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                                HIM Admin
-                            </h1>
-                        </div>
-                        <button
-                            onClick={closeMobileMenu}
-                            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-                    </div>
                     {renderNavContent(true)}
                 </div>
             </aside>

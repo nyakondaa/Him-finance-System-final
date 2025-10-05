@@ -120,14 +120,64 @@ export const deleteBranch = (code: any) =>
   apiClient(`/branches/${code}`, "DELETE");
 
 // --- MEMBER MANAGEMENT ---
+
 export const getMembers = (params = {}) =>
   apiClient(`/members?${new URLSearchParams(params)}`);
 export const getMemberById = (id: any) => apiClient(`/members/${id}`);
-export const createMember = (memberData: any) =>
-  apiClient("/members", "POST", memberData);
-export const updateMember = (id: any, memberData: any) =>
-  apiClient(`/members/${id}`, "PUT", memberData);
-export const deleteMember = (id: any) => apiClient(`/members/${id}`, "DELETE");
+
+
+
+
+
+// src/services/api.ts
+export const createMember = (memberData: any) => {
+  // Transform the data to match what the backend expects
+  const transformedData = {
+    firstName: memberData.firstName,
+    lastName: memberData.lastName,
+    birthDate: memberData.birthDate || null,
+    gender: memberData.gender ? memberData.gender.charAt(0).toUpperCase() + memberData.gender.slice(1).toLowerCase() : null,
+    address: memberData.address || null,
+    phone: memberData.phone || null,
+    email: memberData.email || null,
+    branchId: memberData.branchId ? parseInt(memberData.branchId) : null
+  };
+  
+  return apiClient("/members", "POST", transformedData);
+};
+
+// src/services/api.ts
+export const updateMember = (id: number, memberData: any) => {
+  // Validate that id is a valid number
+  if (!id || isNaN(id)) {
+    throw new Error(`Invalid member ID: ${id}`);
+  }
+
+  // Transform the data for update
+  const transformedData = {
+    firstName: memberData.firstName,
+    lastName: memberData.lastName,
+    birthDate: memberData.birthDate || null,
+    gender: memberData.gender ? memberData.gender.charAt(0).toUpperCase() + memberData.gender.slice(1).toLowerCase() : null,
+    address: memberData.address || null,
+    phone: memberData.phone || null,
+    email: memberData.email || null,
+    branchId: memberData.branchId ? parseInt(memberData.branchId) : null
+  };
+  
+  console.log('Updating member with ID:', id, 'Type:', typeof id); // Debug
+  return apiClient(`/members/${id}`, "PUT", transformedData);
+};
+
+export const deleteMember = (id: number) => {
+  // Validate that id is a valid number
+  if (!id || isNaN(id)) {
+    throw new Error(`Invalid member ID: ${id}`);
+  }
+  
+  console.log('Deleting member with ID:', id, 'Type:', typeof id); // Debug
+  return apiClient(`/members/${id}`, "DELETE");
+};
 
 // --- PROJECT MANAGEMENT ---
 export const getProjects = () => apiClient("/projects");
