@@ -1,11 +1,9 @@
 import type { Transaction,ContributionCreateRequest,ContributionResponse } from "@/utils/Types";
 
-let BASE_URL =
-  import.meta.env.VITE_APP_API_BASE_URL || "http://localhost:5000/api";
-//let BASE_URL =   'http://localhost:5000/api';
-if (!BASE_URL.endsWith("/api")) {
-  BASE_URL = `${BASE_URL}/api`;
-}
+let BASE_URL = "http://localhost:8080/api";
+ 
+
+
 
 const apiClient = async (
   endpoint: string,
@@ -67,50 +65,11 @@ const apiClient = async (
   }
 };
 
-//---- list printers
-// Fetch list of printers from backend
-export const listPrinters = async () => {
-  const data = await apiClient("/printers");
-  const list: string[] = data.printers || [];
-  // Fallback sanitize in case backend returns verbose lines
-  const sanitized = list
-    .map((p) => (p || "").toString().trim().split(/\s+/)[0])
-    .filter(Boolean);
-  // Prefer IPP queues first
-  sanitized.sort((a, b) => {
-    const aIpp = /-IPP$/i.test(a);
-    const bIpp = /-IPP$/i.test(b);
-    if (aIpp === bIpp) return a.localeCompare(b);
-    return aIpp ? -1 : 1;
-  });
-  return sanitized;
-};
 
-// Send text to a selected printer
-export const printDocument = async (
-  printerName: string,
-  text: string,
-  copies: number = 1
-) => {
-  if (!printerName || !text) throw new Error("Printer and text are required");
-  const n = Math.max(1, parseInt(String(copies), 10) || 1);
-  const data = await apiClient("/print", "POST", {
-    printer: printerName,
-    text,
-    copies: n,
-  });
-  return data.message;
-};
-
-export const fetchReceiptPdf = async (receiptId: string | number) => {
-  return await apiClient(`/receipt/${receiptId}`, "GET", null, {
-    isBlob: true,
-  });
-};
 
 // --- AUTHENTICATION ---
 export const login = (username: string, password: string) =>
-  apiClient("/login", "POST", { username, password });
+  apiClient("/auth/login", "POST", { username, password });
 export const logout = (refreshToken: string) =>
   apiClient("/logout", "POST", { refreshToken });
 export const refreshToken = (refreshToken: string) =>
@@ -126,7 +85,7 @@ export const getUserById = (id: any) => apiClient(`/users/${id}`);
 export const createUser = (userData: any) =>
   apiClient("/users", "POST", userData);
 export const updateUser = (id: any, userData: any) =>
-  apiClient(`/users/${id}`, "PATCH", userData);
+  apiClient(`/users/${id}`, "PUT", userData);
 export const deleteUser = (id: any) => apiClient(`/users/${id}`, "DELETE");
 export const lockUser = (id: any) => apiClient(`/users/${id}/lock`, "POST");
 export const unlockUser = (id: any) => apiClient(`/users/${id}/unlock`, "POST");
@@ -148,7 +107,7 @@ export const getRoles = () => apiClient("/roles");
 export const createRole = (roleData: any) =>
   apiClient("/roles", "POST", roleData);
 export const updateRole = (id: any, roleData: any) =>
-  apiClient(`/roles/${id}`, "PATCH", roleData);
+  apiClient(`/roles/${id}`, "PUT", roleData);
 export const deleteRole = (id: any) => apiClient(`/roles/${id}`, "DELETE");
 
 // --- BRANCH MANAGEMENT ---
@@ -156,7 +115,7 @@ export const getBranches = () => apiClient("/branches");
 export const addBranch = (branchData: any) =>
   apiClient("/branches", "POST", branchData);
 export const updateBranch = (code: any, branchData: any) =>
-  apiClient(`/branches/${code}`, "PATCH", branchData);
+  apiClient(`/branches/${code}`, "PUT", branchData);
 export const deleteBranch = (code: any) =>
   apiClient(`/branches/${code}`, "DELETE");
 
@@ -167,7 +126,7 @@ export const getMemberById = (id: any) => apiClient(`/members/${id}`);
 export const createMember = (memberData: any) =>
   apiClient("/members", "POST", memberData);
 export const updateMember = (id: any, memberData: any) =>
-  apiClient(`/members/${id}`, "PATCH", memberData);
+  apiClient(`/members/${id}`, "PUT", memberData);
 export const deleteMember = (id: any) => apiClient(`/members/${id}`, "DELETE");
 
 // --- PROJECT MANAGEMENT ---
@@ -176,7 +135,7 @@ export const getProjectById = (id: any) => apiClient(`/projects/${id}`);
 export const createProject = (projectData: any) =>
   apiClient("/projects", "POST", projectData);
 export const updateProject = (id: any, projectData: any) =>
-  apiClient(`/projects/${id}`, "PATCH", projectData);
+  apiClient(`/projects/${id}`, "PUT", projectData);
 export const deleteProject = (id: any) =>
   apiClient(`/projects/${id}`, "DELETE");
 export const getProjectMembers = (projectId: any) =>
@@ -193,14 +152,14 @@ export const getAssetById = (id: any) => apiClient(`/assets/${id}`);
 export const createAsset = (assetData: any) =>
   apiClient("/assets", "POST", assetData);
 export const updateAsset = (id: any, assetData: any) =>
-  apiClient(`/assets/${id}`, "PATCH", assetData);
+  apiClient(`/assets/${id}`, "PUT", assetData);
 export const deleteAsset = (id: any) => apiClient(`/assets/${id}`, "DELETE");
 
 export const getExpenditureHeads = () => apiClient("/expenditure-heads");
 export const addExpenditureHead = (headData: any) =>
   apiClient("/expenditure-heads", "POST", headData);
 export const updateExpenditureHead = (code: any, headData: any) =>
-  apiClient(`/expenditure-heads/${code}`, "PATCH", headData);
+  apiClient(`/expenditure-heads/${code}`, "PUT", headData);
 export const deleteExpenditureHead = (code: any) =>
   apiClient(`/expenditure-heads/${code}`, "DELETE");
 
@@ -212,7 +171,7 @@ export const createContribution = (
   apiClient("/contributions", "POST", contributionData);
 
 export const updateContribution = (id: string | number, contributionData: any) =>
-  apiClient(`/contributions/${id}`, "PATCH", contributionData);
+  apiClient(`/contributions/${id}`, "PUT", contributionData);
 
 export const deleteContribution = (id: string | number) =>
   apiClient(`/contributions/${id}`, "DELETE");
@@ -230,7 +189,7 @@ export const getExpenditureById = (id: any) => apiClient(`/expenditures/${id}`);
 export const createExpenditure = (expenditureData: any) =>
   apiClient("/expenditures", "POST", expenditureData);
 export const updateExpenditure = (id: any, expenditureData: any) =>
-  apiClient(`/expenditures/${id}`, "PATCH", expenditureData);
+  apiClient(`/expenditures/${id}`, "PUT", expenditureData);
 export const deleteExpenditure = (id: any) =>
   apiClient(`/expenditures/${id}`, "DELETE");
 export const approveExpenditure = (id: any) =>
@@ -246,7 +205,7 @@ export const getSupplierById = (id: any) => apiClient(`/suppliers/${id}`);
 export const createSupplier = (supplierData: any) =>
   apiClient("/suppliers", "POST", supplierData);
 export const updateSupplier = (id: any, supplierData: any) =>
-  apiClient(`/suppliers/${id}`, "PATCH", supplierData);
+  apiClient(`/suppliers/${id}`, "PUT", supplierData);
 export const deleteSupplier = (id: any) =>
   apiClient(`/suppliers/${id}`, "DELETE");
 
@@ -257,7 +216,7 @@ export const getContractById = (id: any) => apiClient(`/contracts/${id}`);
 export const createContract = (contractData: any) =>
   apiClient("/contracts", "POST", contractData);
 export const updateContract = (id: any, contractData: any) =>
-  apiClient(`/contracts/${id}`, "PATCH", contractData);
+  apiClient(`/contracts/${id}`, "PUT", contractData);
 export const deleteContract = (id: any) =>
   apiClient(`/contracts/${id}`, "DELETE");
 
@@ -268,7 +227,7 @@ export const getBudgetById = (id: any) => apiClient(`/budget-periods/${id}`);
 export const createBudget = (budgetData: any) =>
   apiClient("/budget-periods", "POST", budgetData);
 export const updateBudget = (id: any, budgetData: any) =>
-  apiClient(`/budget-periods/${id}`, "PATCH", budgetData);
+  apiClient(`/budget-periods/${id}`, "PUT", budgetData);
 export const deleteBudget = (id: any) =>
   apiClient(`/budget-periods/${id}`, "DELETE");
 export const getBudgetLines = (budgetId: any) =>
@@ -314,14 +273,14 @@ export const getCurrencies = () => apiClient("/currencies");
 export const createCurrency = (currencyData: any) =>
   apiClient("/currencies", "POST", currencyData);
 export const updateCurrency = (code: any, currencyData: any) =>
-  apiClient(`/currencies/${code}`, "PATCH", currencyData);
+  apiClient(`/currencies/${code}`, "PUT", currencyData);
 export const deleteCurrency = (code: any) =>
   apiClient(`/currencies/${code}`, "DELETE");
 export const getPaymentMethods = () => apiClient("/payment-methods");
 export const createPaymentMethod = (paymentMethodData: any) =>
   apiClient("/payment-methods", "POST", paymentMethodData);
 export const updatePaymentMethod = (id: any, paymentMethodData: any) =>
-  apiClient(`/payment-methods/${id}`, "PATCH", paymentMethodData);
+  apiClient(`/payment-methods/${id}`, "PUT", paymentMethodData);
 export const deletePaymentMethod = (id: any) =>
   apiClient(`/payment-methods/${id}`, "DELETE");
 export const getCurrencyPaymentMethods = (currencyCode: any) =>
@@ -335,7 +294,7 @@ export const updateCurrencyPaymentMethod = (
 ) =>
   apiClient(
     `/currencies/${currencyCode}/payment-methods/${paymentMethodId}`,
-    "PATCH",
+    "PUT",
     data
   );
 export const deleteCurrencyPaymentMethod = (
@@ -353,7 +312,7 @@ export const updatePaymentMethodCurrency = (
 ) =>
   apiClient(
     `/payment-methods/${paymentMethodId}/currencies/${currencyCode}`,
-    "PATCH",
+    "PUT",
     data
   );
 export const deletePaymentMethodCurrency = (
@@ -370,7 +329,7 @@ export const getRevenueHeads = () => apiClient("/revenue-heads");
 export const addRevenueHead = (headData: any) =>
   apiClient("/revenue-heads", "POST", headData);
 export const updateRevenueHead = (code: any, headData: any) =>
-  apiClient(`/revenue-heads/${code}`, "PATCH", headData);
+  apiClient(`/revenue-heads/${code}`, "PUT", headData);
 export const deleteRevenueHead = (code: any) =>
   apiClient(`/revenue-heads/${code}`, "DELETE");
 
@@ -387,7 +346,7 @@ export const getExchangeRates = () => apiClient("/exchange-rates");
 export const createExchangeRate = (rateData: any) =>
   apiClient("/exchange-rates", "POST", rateData);
 export const updateExchangeRate = (id: any, rateData: any) =>
-  apiClient(`/exchange-rates/${id}`, "PATCH", rateData);
+  apiClient(`/exchange-rates/${id}`, "PUT", rateData);
 export const deleteExchangeRate = (id: any) =>
   apiClient(`/exchange-rates/${id}`, "DELETE");
 export const getExchangeRateById = (id: any) =>
@@ -405,7 +364,7 @@ export const getOrganizationById = (id: any) =>
 export const createOrganization = (organizationData: any) =>
   apiClient("/organizations", "POST", organizationData);
 export const updateOrganization = (id: any, organizationData: any) =>
-  apiClient(`/organizations/${id}`, "PATCH", organizationData);
+  apiClient(`/organizations/${id}`, "PUT", organizationData);
 export const deleteOrganization = (id: any) =>
   apiClient(`/organizations/${id}`, "DELETE");
 export const getOrganizationStats = (id: any, period = "month") =>
@@ -420,7 +379,7 @@ export const getStudentById = (id: any) => apiClient(`/students/${id}`);
 export const createStudent = (studentData: any) =>
   apiClient("/students", "POST", studentData);
 export const updateStudent = (id: any, studentData: any) =>
-  apiClient(`/students/${id}`, "PATCH", studentData);
+  apiClient(`/students/${id}`, "PUT", studentData);
 export const deleteStudent = (id: any) =>
   apiClient(`/students/${id}`, "DELETE");
 export const getStudentFeePayments = (id: any, params = {}) =>

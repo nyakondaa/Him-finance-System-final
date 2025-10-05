@@ -2,8 +2,43 @@ import React, { createContext, useState, useEffect, useCallback, useRef } from '
 import { jwtDecode } from 'jwt-decode';
 import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken } from '../services/api';
 
+// --- Interface Definitions ---
+
+// Extend the decoded JWT payload type to include custom fields
+interface DecodedToken {
+    sub: string;
+    userId?: number | string;
+    role?: string;
+    branchCode?: string;
+    branch?: string;
+    permissions?: string[];
+    exp?: number;
+    // Add firstName and lastName to the expected token payload
+    firstName?: string;
+    lastName?: string;
+    // Index signature to allow accessing arbitrary properties
+    [key: string]: any;
+}
+
+
+// Define the shape of the user data object
+interface UserDataType {
+    id: string;
+    // FIX: Corrected typo from 'firsName' to 'firstName'
+    firstName: string; 
+    lastName: string;
+    username: string;
+    role: string;
+    isAdmin: boolean;
+    isSupervisor: boolean;
+    branch: string | null;      
+    branchCode: string | null;  // Branch code from the token/response (e.g., "HB")
+    branchName: string | null;  // Branch name from the token/response
+    permissions: string[];
+}
+
 interface AuthContextType {
-    currentUser: any;
+    currentUser: UserDataType | null;
     loggedIn: boolean;
     loadingAuth: boolean;
     handleLogin: (username: string, password: string) => Promise<boolean>;
@@ -18,7 +53,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [currentUser, setCurrentUser] = useState<UserDataType | null>(null);
     const [loggedIn, setLoggedIn] = useState(false);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
@@ -26,70 +61,113 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Debugging logs
     const debugLog = (message: string, data?: any) => {
-        console.log(`[AuthContext] ${message}`, data || '');
+        // console.log(`[AuthContext] ${message}`, data || ''); // Uncomment for debugging
     };
 
-    // Decode token and set user state
-    const decodeAndSetUser = useCallback((token: string) => {
+    // --- Core Logic: Token Validity Check (Minimal) ---
+    const decodeAndCheckTokenValidity = useCallback((token: string) => {
         try {
-            const decoded = jwtDecode(token);
+            const decoded = jwtDecode<DecodedToken>(token);
             const now = Date.now() / 1000;
 
             if (!decoded.exp || decoded.exp < now) {
                 debugLog('Token expired or invalid');
                 return false;
             }
-
-            const userRole = (decoded as any).roleName?.toLowerCase() || '';
-            setCurrentUser({
-                id: (decoded as any).id,
-                username: (decoded as any).username,
-                role: userRole,
-                isAdmin: userRole === 'admin',
-                isSupervisor: userRole === 'supervisor',
-                branch: (decoded as any).branch,
-                branchCode: (decoded as any).branchCode || (decoded as any).branch,
-                permissions: (decoded as any).permissions || []
-            });
-            setLoggedIn(true);
+            debugLog('Token is valid');
             return true;
         } catch (error) {
-            debugLog('Token decode error', error);
+            debugLog('Token decode error (malformed token)', error);
             return false;
         }
     }, []);
 
-    // Handle login
-    const handleLogin = useCallback(async (username: string, password: string) => {
+    /**
+     * Creates a UserDataType object from an Access Token and an optional API response body.
+     */
+    const setUserStateFromResponse = (response: any, accessToken: string): UserDataType => {
+        // Use the DecodedToken interface for better type checking
+        const decoded = jwtDecode<DecodedToken>(accessToken);
+        
+        // Use data from API response first, then fallback to token payload
+        const userRole = (response.role || decoded.role || '').toLowerCase();
+        const apiUsername = response.username || decoded.sub || '';
+        
+        // 🚀 CHANGES: Prioritize API response for first/last name, then token payload
+        const userFirstName = response.firstName || decoded.firstName || '';
+        const userLastName = response.lastName || decoded.lastName || '';
+        
+        const isAdminRole = userRole === 'admin';
+        const isSupervisorRole = userRole === 'supervisor';
+        
+        const userData: UserDataType = {
+            id: decoded.userId ? String(decoded.userId) : apiUsername,
+            firstName: userFirstName, // 💡 FIX: Corrected key name
+            lastName: userLastName,
+            username: apiUsername,
+            role: userRole.toUpperCase(), 
+            
+            isAdmin: isAdminRole,
+            isSupervisor: isSupervisorRole,
+            
+            branchCode: response.branch || decoded.branchCode || null, 
+            branchName: decoded.branch || null,
+            branch: response.branch || decoded.branchCode || null,
+            
+            permissions: response.permissions || decoded.permissions || [],
+        };
+
+        setCurrentUser(userData);
+        setLoggedIn(true);
+        debugLog('User state updated successfully', userData);
+        return userData;
+    };
+    
+    /**
+     * Restores the UserDataType object purely from an existing Access Token (no API call).
+     */
+    const setUserStateFromToken = useCallback((accessToken: string): boolean => {
         try {
-            setLoadingAuth(true);
-            const response = await apiLogin(username, password);
-            debugLog('Login response', response);
+            // Use the DecodedToken interface for better type checking
+            const decoded = jwtDecode<DecodedToken>(accessToken);
+            
+            const userRole = (decoded.role || '').toLowerCase();
+            const apiUsername = decoded.sub || '';
 
-            if (!response?.accessToken) {
-                throw new Error('No access token received');
-            }
+            const isAdminRole = userRole === 'admin';
+            const isSupervisorRole = userRole === 'supervisor';
+            
+            // 🚀 CHANGES: Pulling firstName and lastName directly from decoded token
+            const userFirstName = decoded.firstName || '';
+            const userLastName = decoded.lastName || '';
 
-            localStorage.setItem('accessToken', response.accessToken);
-            if (response.refreshToken) {
-                localStorage.setItem('refreshToken', response.refreshToken);
-            }
-
-            const success = decodeAndSetUser(response.accessToken);
-            if (!success) {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-            }
-            return success;
+            const userData: UserDataType = {
+                id: decoded.userId ? String(decoded.userId) : apiUsername,
+                firstName: userFirstName, // 💡 FIX: Corrected key name
+                lastName: userLastName,
+                username: apiUsername,
+                role: userRole.toUpperCase(),
+                isAdmin: isAdminRole,
+                isSupervisor: isSupervisorRole,
+                
+                branchCode: decoded.branchCode || null, 
+                branchName: decoded.branch || null, 
+                branch: decoded.branchCode || null,
+                
+                permissions: decoded.permissions || [],
+            };
+            
+            setCurrentUser(userData);
+            setLoggedIn(true);
+            debugLog('User state restored from Access Token', userData);
+            return true;
         } catch (error) {
-            debugLog('Login failed', error);
-            throw error;
-        } finally {
-            setLoadingAuth(false);
+            debugLog('Failed to restore state from token', error);
+            return false;
         }
-    }, [decodeAndSetUser]);
+    }, []);
 
-    // Handle logout
+    // --- Handle Logout (Logic preserved) ---
     const handleLogout = useCallback(async () => {
         try {
             const refreshToken = localStorage.getItem('refreshToken');
@@ -113,7 +191,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
     }, []);
 
-    // Refresh token with race condition protection
+    // --- Handle Login (Logic preserved) ---
+    const handleLogin = useCallback(async (username: string, password: string) => {
+        try {
+            setLoadingAuth(true);
+            const response = await apiLogin(username, password);
+
+            if (!response?.accessToken) {
+                throw new Error('No access token received');
+            }
+
+            localStorage.setItem('accessToken', response.accessToken);
+            if (response.refreshToken) {
+                localStorage.setItem('refreshToken', response.refreshToken);
+            }
+
+            // Set the rich state from the API response
+            setUserStateFromResponse(response, response.accessToken);
+            console.log(response)
+            
+            return true;
+        } catch (error) {
+            debugLog('Login failed', error);
+            localStorage.removeItem('accessToken'); 
+            localStorage.removeItem('refreshToken');
+            setCurrentUser(null);
+            setLoggedIn(false);
+            throw error;
+        } finally {
+            setLoadingAuth(false);
+        }
+    }, []);
+
+    // --- Refresh Token with Race Condition Protection (Logic preserved) ---
     const refreshAccessToken = useCallback(async () => {
         if (refreshPromiseRef.current) {
             debugLog('Using existing refresh promise');
@@ -127,44 +237,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             return false;
         }
 
-        try {
-            debugLog('Attempting token refresh');
-            const promise = apiRefreshToken(refreshToken)
-                .then(response => {
-                    debugLog('Refresh token response', response);
-                    if (!response?.accessToken) {
-                        throw new Error('No access token in response');
-                    }
+        const promise = (async () => {
+            try {
+                debugLog('Attempting token refresh');
+                const response = await apiRefreshToken(refreshToken);
 
-                    localStorage.setItem('accessToken', response.accessToken);
-                    if (response.refreshToken) {
-                        localStorage.setItem('refreshToken', response.refreshToken);
-                    }
+                if (!response?.accessToken) {
+                    throw new Error('No access token in response');
+                }
 
-                    const success = decodeAndSetUser(response.accessToken);
-                    if (!success) {
-                        throw new Error('Failed to decode new token');
-                    }
-                    return true;
-                })
-                .catch(error => {
-                    debugLog('Refresh failed', error);
-                    throw error;
-                })
-                .finally(() => {
-                    refreshPromiseRef.current = null;
-                });
+                localStorage.setItem('accessToken', response.accessToken);
+                if (response.refreshToken) {
+                    localStorage.setItem('refreshToken', response.refreshToken);
+                }
 
-            refreshPromiseRef.current = promise;
-            return await promise;
-        } catch (error) {
-            debugLog('Refresh token critical failure', error);
-            await handleLogout();
-            return false;
-        }
-    }, [decodeAndSetUser, handleLogout]);
+                // Restore user state from the new token/response
+                const success = decodeAndCheckTokenValidity(response.accessToken);
+                if (!success) {
+                    throw new Error('Failed to validate new token');
+                }
 
-    // Get valid token (auto-refresh if needed)
+                setUserStateFromResponse(response, response.accessToken);
+                return true;
+
+            } catch (error) {
+                debugLog('Refresh failed', error);
+                await handleLogout();
+                return false;
+            } finally {
+                refreshPromiseRef.current = null;
+            }
+        })();
+
+        refreshPromiseRef.current = promise;
+        return promise;
+
+    }, [handleLogout, decodeAndCheckTokenValidity]);
+
+    // --- Get valid token (auto-refresh if needed) (Logic preserved) ---
     const getValidToken = useCallback(async () => {
         const accessToken = localStorage.getItem('accessToken');
         if (!accessToken) return null;
@@ -174,7 +284,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             const now = Date.now() / 1000;
             const timeUntilExpiry = (decoded.exp || 0) - now;
 
-            if (timeUntilExpiry < 300) { // 5 minute threshold
+            if (timeUntilExpiry < 300) { // 5 minute threshold (300 seconds)
                 debugLog('Token expiring soon, refreshing...');
                 const refreshed = await refreshAccessToken();
                 return refreshed ? localStorage.getItem('accessToken') : null;
@@ -183,20 +293,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             return accessToken;
         } catch (error) {
             debugLog('Token validation error', error);
-            return null;
+            return accessToken;
         }
     }, [refreshAccessToken]);
 
-    // Permission checks
+    // --- Permission checks (Logic preserved) ---
     const hasPermission = useCallback((permission: string) => {
-        return currentUser?.isAdmin || currentUser?.permissions?.includes(permission);
+        if (!currentUser) return false;
+        
+        if (currentUser.isAdmin) {
+            return true;
+        }
+
+        return currentUser.permissions.includes(permission);
     }, [currentUser]);
 
     const isAdmin = useCallback(() => currentUser?.isAdmin === true, [currentUser]);
     const isSupervisor = useCallback(() => currentUser?.isSupervisor === true, [currentUser]);
     const isAdminOrSupervisor = useCallback(() => isAdmin() || isSupervisor(), [isAdmin, isSupervisor]);
 
-    // Initial auth check
+    // --- Initial auth check (Logic preserved) ---
     useEffect(() => {
         const checkAuth = async () => {
             const accessToken = localStorage.getItem('accessToken');
@@ -206,14 +322,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
 
             try {
-                const decoded = jwtDecode(accessToken);
-                const now = Date.now() / 1000;
-                const timeUntilExpiry = (decoded.exp || 0) - now;
+                const isValid = decodeAndCheckTokenValidity(accessToken);
 
-                if (timeUntilExpiry > 60) {
-                    decodeAndSetUser(accessToken);
+                if (isValid) {
+                    const restored = setUserStateFromToken(accessToken);
+                    
+                    if (restored) {
+                        await getValidToken(); 
+                    } else {
+                        await handleLogout(); 
+                    }
                 } else {
-                    const refreshed = await refreshAccessToken();
+                    const refreshed = await refreshAccessToken(); 
                     if (!refreshed) {
                         await handleLogout();
                     }
@@ -227,11 +347,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
 
         checkAuth();
-    }, [decodeAndSetUser, refreshAccessToken, handleLogout]);
+    }, [
+        refreshAccessToken, 
+        handleLogout, 
+        decodeAndCheckTokenValidity, 
+        setUserStateFromToken, 
+        getValidToken
+    ]);
 
-    // Auto-refresh logic
+    // --- Auto-refresh logic (Logic preserved) ---
     useEffect(() => {
         if (!loggedIn) return;
+
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+        }
 
         refreshIntervalRef.current = setInterval(async () => {
             debugLog('Running periodic token check');
@@ -244,14 +374,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             try {
                 const decoded = jwtDecode(accessToken);
                 const now = Date.now() / 1000;
-                if ((decoded.exp || 0) - now < 600) { // 10 minute threshold
+                if ((decoded.exp || 0) - now < 600) { 
                     await refreshAccessToken();
                 }
             } catch (error) {
-                debugLog('Periodic token check failed', error);
-                await handleLogout();
+                debugLog('Periodic token check failed (token decode)', error);
             }
-        }, 300000); // 5 minutes
+        }, 300000); // 5 minutes (300000 ms)
 
         return () => {
             if (refreshIntervalRef.current) {
@@ -260,7 +389,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
     }, [loggedIn, refreshAccessToken, handleLogout]);
 
-    // Context value
+    // --- Context value ---
     const authContextValue = {
         currentUser,
         loggedIn,

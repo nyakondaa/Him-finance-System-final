@@ -20,7 +20,7 @@ const LoginPage = () => {
     try {
       const success = await handleLogin(username, password);
       if (success) {
-        // Simple redirect without modal
+        console.log("Login successful");
         navigate("/", { replace: true });
       }
     } catch (err) {

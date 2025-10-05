@@ -93,7 +93,14 @@ const Navbar = () => {
          
         */} 
 
-    const isAdminOrSupervisor = currentUser.role === 'admin' || currentUser.role === 'supervisor';
+     const role = currentUser.role.toLowerCase();
+
+    const isAdminOrSupervisor = role=== 'admin' || role=== 'supervisor';
+    console.log(`coming from the navbar ${currentUser.role}`)
+
+    if (isAdminOrSupervisor){
+        console.log(isAdminOrSupervisor)
+    }
 
     const renderNavContent = (isMobile) => (
         <>

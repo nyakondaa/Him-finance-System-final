@@ -1,11 +1,6 @@
 // src/pages/UserManagementPage.jsx
-import React, { useEffect, useState } from "react";
-import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-  
-} from "@tanstack/react-query";
+import React, { useState, useMemo, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   Lock,
@@ -14,16 +9,12 @@ import {
   MinusCircle,
   Trash2,
   Edit,
- 
   Eye,
   EyeOff,
   Search,
-  Mail,
-  Phone,
-  Calendar,
-  Activity,
   AlertTriangle,
   RefreshCw,
+  ChevronDown,
 } from "lucide-react";
 import {
   getUsers,
@@ -31,62 +22,180 @@ import {
   updateUser,
   deleteUser,
   getBranches,
+  getRoles,
   lockUser,
   unlockUser,
   resetPassword,
 } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import useAuth from "../hooks/useAuth";
-import { data } from "react-router-dom";
 
-// Predefined system roles with their permissions
-const SYSTEM_ROLES = [
-  {
-    id: 1,
-    name: "admin",
-    displayName: "Administrator",
-    description: "Full system access with all permissions",
-    permissions: {
-      users: ["read", "create", "update", "delete", "lock_unlock"],
-      roles: ["read"],
-      branches: ["read", "create", "update", "delete"],
-      transactions: ["read", "create", "update", "delete", "refund"],
-      reports: ["read", "export", "advanced"],
-      settings: ["read", "update", "system_config"],
-    },
-    isActive: true,
-  },
-  {
-    id: 2,
-    name: "supervisor",
-    displayName: "Supervisor",
-    description: "Can manage users and view reports",
-    permissions: {
-      users: ["read", "create", "update", "lock_unlock"],
-      roles: ["read"],
-      branches: ["read"],
-      transactions: ["read", "create", "update"],
-      reports: ["read", "export"],
-      settings: ["read"],
-    },
-    isActive: true,
-  },
-  {
-    id: 3,
-    name: "cashier",
-    displayName: "Cashier",
-    description: "Can process transactions and view basic reports",
-    permissions: {
-      users: ["read"],
-      roles: ["read"],
-      branches: ["read"],
-      transactions: ["read", "create"],
-      reports: ["read"],
-      settings: ["read"],
-    },
-    isActive: true,
-  },
-];
+// --- Type Definitions ---
+interface Branch {
+  id: number;
+  branchName: string;
+  branchAddress: string;
+  branchPhone: string;
+  branchEmail: string;
+  branchCode: string;
+}
+
+interface Role {
+  name: string;
+  description: string;
+}
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  roles: string[];
+  branch: string;
+  locked?: boolean;
+  isActive?: boolean;
+  attempts?: number;
+  lastLogin?: string | null;
+  createdAt?: string;
+  createdBy?: string | null;
+}
+
+interface UserFormState {
+  username: string;
+  password?: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  roles: string[];
+  branch: string;
+}
+
+const getInitialFormState = (branch: string): UserFormState => ({
+  username: "",
+  password: "",
+  email: "",
+  firstName: "",
+  lastName: "",
+  phoneNumber: "",
+  roles: [],
+  branch: branch,
+});
+
+const PASSWORD_REGEX =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+])[a-zA-Z\d!@#$%^&*()_+]{8,}$/;
+
+// Custom hook for optimized data fetching
+const useAppData = () => {
+  const queryOptions = {
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    cacheTime: 10 * 60 * 1000, // 10 minutes
+  };
+
+  const usersQuery = useQuery({
+    queryKey: ["users"],
+    queryFn: getUsers,
+    ...queryOptions,
+  });
+
+  const branchesQuery = useQuery({
+    queryKey: ["branches"],
+    queryFn: getBranches,
+    ...queryOptions,
+  });
+
+  const rolesQuery = useQuery({
+    queryKey: ["roles"],
+    queryFn: getRoles,
+    ...queryOptions,
+  });
+
+  return {
+    users: usersQuery.data || [],
+    branches: branchesQuery.data || [],
+    roles: rolesQuery.data || [],
+    isLoading: usersQuery.isLoading || branchesQuery.isLoading || rolesQuery.isLoading,
+    error: usersQuery.error || branchesQuery.error || rolesQuery.error,
+    refetch: () => {
+      usersQuery.refetch();
+      branchesQuery.refetch();
+      rolesQuery.refetch();
+    }
+  };
+};
+
+// Status Badge Component
+const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const getStatusStyles = () => {
+    switch (status.toLowerCase()) {
+      case "active":
+        return "bg-green-50 text-green-700 border border-green-200";
+      case "inactive":
+        return "bg-gray-50 text-gray-700 border border-gray-200";
+      case "locked":
+        return "bg-red-50 text-red-700 border border-red-200";
+      default:
+        return "bg-gray-50 text-gray-700 border border-gray-200";
+    }
+  };
+
+  return (
+    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusStyles()}`}>
+      {status}
+    </span>
+  );
+};
+
+// 2FA Badge Component
+const TwoFABadge: React.FC<{ enabled: boolean }> = ({ enabled }) => (
+  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+    enabled 
+      ? "bg-blue-50 text-blue-700 border border-blue-200" 
+      : "bg-gray-50 text-gray-500 border border-gray-200"
+  }`}>
+    {enabled ? "Enabled" : "Disabled"}
+  </span>
+);
+
+// Monogram Avatar Component
+const MonogramAvatar: React.FC<{
+  firstName: string;
+  lastName: string;
+  username: string;
+}> = ({ firstName, lastName, username }) => {
+  let initials = "";
+  let bgColor = "bg-gray-100";
+  let textColor = "text-gray-600";
+
+  const first = (firstName?.[0] || "").toUpperCase();
+  const last = (lastName?.[0] || "").toUpperCase();
+
+  if (first && last) {
+    initials = `${first}${last}`;
+    bgColor = "bg-blue-100";
+    textColor = "text-blue-600";
+  } else if (username) {
+    initials = username.slice(0, 2).toUpperCase();
+    bgColor = "bg-gray-100";
+    textColor = "text-gray-600";
+  } else {
+    return (
+      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3 text-gray-400">
+        <Users className="w-4 h-4" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`w-8 h-8 rounded-full ${bgColor} ${textColor} flex items-center justify-center mr-3 text-sm font-medium`}
+    >
+      {initials}
+    </div>
+  );
+};
 
 type UserManagementPageProps = {
   showModal: (
@@ -101,94 +210,83 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({
   showModal,
 }) => {
   const queryClient = useQueryClient();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
 
-  // State for tabs
-  
+  // Use the custom hook for data fetching
+  const { 
+    users: usersData, 
+    branches, 
+    roles, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useAppData();
 
-  // User management state
-  const [newUser, setNewUser] = useState({
-    username: "",
-    password: "",
-    email: "",
-    firstName: "",
-    lastName: "",
-    phoneNumber: "",
-    roleId: "",
-    branchCode: currentUser?.branchCode || "",
-  });
-  const [editingUser, setEditingUser] = useState(null);
+  const [newUser, setNewUser] = useState<UserFormState>(() =>
+    getInitialFormState(currentUser?.branch || "")
+  );
+
+  const [editingUser, setEditingUser] = useState<
+    (User & { password?: string }) | null
+  >(null);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [fechUsers, setFetchUsers] = useState([])
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  // Fetch users
-  const {
-  data: users,
-  isLoading: isLoadingUsers,
-  error: usersError,
-} = useQuery({
-  queryKey: ["users"],
-  queryFn: getUsers,
-});
+  // Memoized derived data for better performance
+  const availableBranches = useMemo(() => branches, [branches]);
+  const availableRoles = useMemo(() => roles, [roles]);
 
+  // Filter users with memoization
+  const filteredUsers = useMemo(() => {
+    if (!usersData || usersData.length === 0) return [];
 
-console.log(`these are my users ${users}`)
+    return usersData.filter((user) => {
+      const matchesSearch = 
+        user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        `${user.firstName || ""} ${user.lastName || ""}`
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase());
 
-useEffect(() => {
-  
-  const fetchedUsers = async () => {
-    try {
-      const data = await getUsers();
-      setFetchUsers(data.users);
-      console.log("Fetched Users:", data);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
-  }
+      const matchesRole = roleFilter === "all" || 
+        user.roles.some(role => role === roleFilter);
 
-  fetchedUsers();
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "active" && user.isActive && !user.locked) ||
+        (statusFilter === "inactive" && !user.isActive) ||
+        (statusFilter === "locked" && user.locked);
 
-  
-}, [data]);
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [usersData, searchTerm, roleFilter, statusFilter]);
 
-  // Fetch branches
-  const {
-    data: branches = [],
-    isLoading: isLoadingBranches,
-    error: branchesError,
-  } = useQuery({
-    queryKey: ["branches"],
-    queryFn: getBranches,
-    onError: (err: { message: any }) =>
-      showModal(err.message || "Failed to load branches.", "Error"),
-  });
-
-  // User mutations
+  // Mutations
   const createUserMutation = useMutation({
     mutationFn: createUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       showModal("User created successfully!");
       resetUserForm();
+      setIsFormVisible(false);
     },
-    onError: (err) =>
-      showModal(err.message || "Failed to create user.",),
+    onError: (err: any) =>
+      showModal(err.message || "Failed to create user.", "Error"),
   });
 
-  const updateUserMutation = useMutation<
-    { id: number; data: any },
-    any,
-    { id: number; data: any }
-  >({
-    mutationFn: ({ id, data }) => updateUser(id, data),
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<UserFormState> }) => 
+      updateUser(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(["users"]);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       showModal("User updated successfully!");
       setEditingUser(null);
+      setIsFormVisible(false);
     },
-    onError: (err) =>
+    onError: (err: any) =>
       showModal(err.message || "Failed to update user.", "Error"),
   });
 
@@ -198,105 +296,84 @@ useEffect(() => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       showModal("User deleted successfully.");
     },
-    onError: (err) =>
+    onError: (err: any) =>
       showModal(err.message || "Failed to delete user.", "Error"),
   });
 
   const lockUserMutation = useMutation({
     mutationFn: lockUser,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      showModal("User locked successfully.");
-    },
-    onError: (err) => showModal(err.message || "Failed to lock user.", "Error"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    onError: (err: any) =>
+      showModal(err.message || "Failed to lock user.", "Error"),
   });
 
   const unlockUserMutation = useMutation({
     mutationFn: unlockUser,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      showModal("User unlocked successfully.");
-    },
-    onError: (err) =>
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    onError: (err: any) =>
       showModal(err.message || "Failed to unlock user.", "Error"),
   });
 
   const resetPasswordMutation = useMutation({
-    mutationFn: ({ token, newPassword }) => resetPassword(token, newPassword),
-    onSuccess: () => {
-      queryClient.invalidateQueries({});
-      showModal(
-        "Password reset successfully. New password has been generated."
-      );
-    },
-    onError: (err) =>
+    mutationFn: (userId: number) => resetPassword(userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    onError: (err: any) =>
       showModal(err.message || "Failed to reset password.", "Error"),
   });
 
-  // Helper functions
-  const resetUserForm = () => {
-    setNewUser({
-      username: "",
-      password: "",
-      email: "",
-      firstName: "",
-      lastName: "",
-      phoneNumber: "",
-      roleId: "",
-      branchCode: currentUser?.branchCode || "",
-    });
+  // Helper Functions
+  const resetUserForm = useCallback(() => {
+    setNewUser(getInitialFormState(currentUser?.branch || ""));
     setPasswordError("");
-  };
+    setEditingUser(null);
+  }, [currentUser?.branch]);
 
-  const validatePassword = (password: string) => {
-    const regex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+])[a-zA-Z\d!@#$%^&*()_+]{8,}$/;
-    if (!regex.test(password)) {
+  const validatePassword = (password: string): string => {
+    if (!PASSWORD_REGEX.test(password)) {
       return "Password must be at least 8 characters, contain uppercase, lowercase, a number, and a special character.";
     }
     return "";
   };
 
   const handleCreateUser = () => {
-  const error = validatePassword(newUser.password);
-  if (error) {
-    setPasswordError(error);
-    return;
-  }
-  
-  // 
-  const userData = {
-    username: newUser.username,
-    password: newUser.password,
-    roleId: parseInt(newUser.roleId),
-    branchCode: newUser.branchCode,
-    firstName: newUser.firstName,
-    lastName: newUser.lastName,
-    email: newUser.email,
-    phoneNumber: newUser.phoneNumber
+    const error = validatePassword(newUser.password || "");
+    if (error) {
+      setPasswordError(error);
+      return;
+    }
+
+    createUserMutation.mutate(newUser as any);
   };
-  
-  createUserMutation.mutate(userData);
-};
 
   const handleUpdateUser = () => {
-    const updateData = { ...editingUser };
-    if (updateData.password && updateData.password.trim() !== "") {
-      const error = validatePassword(updateData.password);
+    if (!editingUser) return;
+
+    const updateData: Partial<UserFormState> = {
+      username: editingUser.username,
+      email: editingUser.email,
+      firstName: editingUser.firstName,
+      lastName: editingUser.lastName,
+      phoneNumber: editingUser.phoneNumber || "",
+      roles: editingUser.roles,
+      branch: editingUser.branch,
+    };
+
+    if (editingUser.password && editingUser.password.trim() !== "") {
+      const error = validatePassword(editingUser.password);
       if (error) {
         setPasswordError(error);
         return;
       }
-    } else {
-      delete updateData.password; // Don't update password if empty
+      updateData.password = editingUser.password;
     }
+
     updateUserMutation.mutate({
       id: editingUser.id,
-      data: { ...updateData, roleId: parseInt(updateData.roleId) },
+      data: updateData,
     });
   };
 
-  const handleToggleUserLock = (userId, currentLockedStatus) => {
+  const handleToggleUserLock = (userId: number, currentLockedStatus: boolean) => {
     if (currentLockedStatus) {
       unlockUserMutation.mutate(userId);
     } else {
@@ -304,7 +381,7 @@ useEffect(() => {
     }
   };
 
-  const handleResetPassword = (userId) => {
+  const handleResetPassword = (userId: number) => {
     showModal(
       "Are you sure you want to reset this user's password? A new temporary password will be generated.",
       "Confirm Password Reset",
@@ -313,7 +390,7 @@ useEffect(() => {
     );
   };
 
-  const handleDeleteUser = (userId, username) => {
+  const handleDeleteUser = (userId: number, username: string) => {
     showModal(
       `Are you sure you want to delete user "${username}"? This action cannot be undone.`,
       "Confirm Deletion",
@@ -322,41 +399,33 @@ useEffect(() => {
     );
   };
 
-  // Filter users based on search term
- // Corrected Code
-// Use optional chaining to safely access 'users' and provide an empty array as a fallback.
-
-
-const filteredUsers = Array.isArray(fechUsers)
-  ? fechUsers.filter(
-      (user) =>
-        user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        `${user.firstName || ""} ${user.lastName || ""}`
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  : [];
-
-  if (isLoadingUsers || isLoadingBranches) {
+  // Loading and Error States
+  if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  if (usersError || branchesError) {
+  if (error) {
     return (
       <div className="text-center text-red-600 p-8">
         <p>Error loading data:</p>
-        {usersError && <p>{usersError.message}</p>}
-        {branchesError && <p>{branchesError.message}</p>}
+        <p>{(error as any).message}</p>
+        <button
+          onClick={refetch}
+          className="mt-4 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-1 mx-auto"
+        >
+          <RefreshCw className="w-4 h-4" /> Try Again
+        </button>
       </div>
     );
   }
 
-  // Check permissions
-  const canManageUsers =
-    currentUser?.permissions?.users?.includes("read") || false;
+  const canReadUsers = hasPermission("users:read");
+  const canCreateUsers = hasPermission("users:create");
+  const canUpdateUsers = hasPermission("users:update");
+  const canDeleteUsers = hasPermission("users:delete");
+  const canLockUnlockUsers = hasPermission("users:lock_unlock");
 
-  if (!canManageUsers) {
+  if (!canReadUsers) {
     return (
       <div className="bg-white p-8 rounded-xl shadow-lg text-center text-gray-700">
         <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
@@ -366,419 +435,402 @@ const filteredUsers = Array.isArray(fechUsers)
         </p>
       </div>
     );
-    
   }
-
-  console.log(filteredUsers)
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <h2 className="text-3xl font-extrabold mb-8 text-gray-800 flex items-center gap-3">
-        <Users className="w-8 h-8 text-blue-600" />
-        User Management
-      </h2>
+      {/* Header Section */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          User management
+        </h1>
+        <p className="text-gray-600">
+          Manage your team members and their account permissions here.
+        </p>
+      </div>
 
-      <div className="bg-white rounded-xl shadow-lg mb-8 border border-gray-200">
-        {/* Create/Edit User Form */}
-        <div className="p-8">
-          <h3 className="text-xl font-semibold mb-6 text-gray-700">
-            {editingUser ? "Edit User" : "Create New User"}
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Action Bar */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Username *"
-              value={editingUser ? editingUser.username : newUser.username}
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({ ...editingUser, username: e.target.value })
-                  : setNewUser({ ...newUser, username: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
             />
-            <input
-              type="email"
-              placeholder="Email"
-              value={editingUser ? editingUser.email || "" : newUser.email}
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({ ...editingUser, email: e.target.value })
-                  : setNewUser({ ...newUser, email: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            />
-            <input
-              type="text"
-              placeholder="First Name"
-              value={
-                editingUser ? editingUser.firstName || "" : newUser.firstName
-              }
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({
-                      ...editingUser,
-                      firstName: e.target.value,
-                    })
-                  : setNewUser({ ...newUser, firstName: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            />
-            <input
-              type="text"
-              placeholder="Last Name"
-              value={
-                editingUser ? editingUser.lastName || "" : newUser.lastName
-              }
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({ ...editingUser, lastName: e.target.value })
-                  : setNewUser({ ...newUser, lastName: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            />
-            <input
-              type="tel"
-              placeholder="Phone Number"
-              value={
-                editingUser
-                  ? editingUser.phoneNumber || ""
-                  : newUser.phoneNumber
-              }
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({
-                      ...editingUser,
-                      phoneNumber: e.target.value,
-                    })
-                  : setNewUser({ ...newUser, phoneNumber: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            />
+          </div>
+
+          {/* Filter Buttons */}
+          <div className="flex gap-2">
             <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder={
-                  editingUser
-                    ? "New Password (leave blank to keep current)"
-                    : "Password *"
-                }
-                value={
-                  editingUser ? editingUser.password || "" : newUser.password
-                }
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (editingUser) {
-                    setEditingUser({ ...editingUser, password: value });
-                  } else {
-                    setNewUser({ ...newUser, password: value });
-                    setPasswordError(validatePassword(value));
-                  }
-                }}
-                className="border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200 pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2.5 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-            <select
-              value={editingUser ? editingUser.roleId : newUser.roleId}
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({ ...editingUser, roleId: e.target.value })
-                  : setNewUser({ ...newUser, roleId: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            >
-              <option value="">Select Role *</option>
-              {SYSTEM_ROLES.filter((role) => role.isActive).map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.displayName}
-                </option>
-              ))}
-            </select>
-            <select
-              value={editingUser ? editingUser.branchCode : newUser.branchCode}
-              onChange={(e) =>
-                editingUser
-                  ? setEditingUser({
-                      ...editingUser,
-                      branchCode: e.target.value,
-                    })
-                  : setNewUser({ ...newUser, branchCode: e.target.value })
-              }
-              className="border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            >
-              <option value="">Select Branch *</option>
-              {branches
-                .filter((branch) => branch.isActive)
-                .map((branch) => (
-                  <option key={branch.code} value={branch.code}>
-                    {branch.code} - {branch.name}
+                <option value="all">All Roles</option>
+                {availableRoles.map((role) => (
+                  <option key={role.name} value={role.name}>
+                    {role.name}
                   </option>
                 ))}
-            </select>
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2.5 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="locked">Locked</option>
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
           </div>
-          {passwordError && (
-            <p className="text-red-600 text-sm mt-3 flex items-center gap-1">
-              <MinusCircle className="w-4 h-4" /> {passwordError}
-            </p>
-          )}
-          <div className="flex gap-4 mt-6">
-            <button
-              onClick={editingUser ? handleUpdateUser : handleCreateUser}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md flex items-center gap-2"
-              disabled={
-                (editingUser
-                  ? !editingUser.username ||
-                    !editingUser.roleId ||
-                    !editingUser.branchCode
-                  : !newUser.username ||
-                    !newUser.password ||
-                    !newUser.roleId ||
-                    !newUser.branchCode) ||
-                passwordError ||
-                createUserMutation.isPending ||
-                updateUserMutation.isPending
+        </div>
+
+        {/* Add User Button */}
+        {canCreateUsers && (
+          <button
+            onClick={() => {
+              setIsFormVisible(!isFormVisible);
+              if (!isFormVisible) {
+                resetUserForm();
               }
-            >
-              {createUserMutation.isPending || updateUserMutation.isPending ? (
-                editingUser ? (
-                  "Updating..."
+            }}
+            className="bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2 whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            Add New User
+          </button>
+        )}
+      </div>
+
+      {/* Conditional Form Block */}
+      {((editingUser && canUpdateUsers) || isFormVisible) && (
+        <div className="bg-white rounded-lg border border-gray-200 mb-6 shadow-sm">
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              {editingUser ? `Edit User: ${editingUser.username}` : "Create New User"}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <input
+                type="text"
+                placeholder="Username *"
+                value={editingUser ? editingUser.username : newUser.username}
+                onChange={(e) =>
+                  editingUser
+                    ? setEditingUser({
+                        ...editingUser,
+                        username: e.target.value,
+                      })
+                    : setNewUser({ ...newUser, username: e.target.value })
+                }
+                className="border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={editingUser ? editingUser.email : newUser.email}
+                onChange={(e) =>
+                  editingUser
+                    ? setEditingUser({ ...editingUser, email: e.target.value })
+                    : setNewUser({ ...newUser, email: e.target.value })
+                }
+                className="border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="First Name"
+                value={editingUser ? editingUser.firstName : newUser.firstName}
+                onChange={(e) =>
+                  editingUser
+                    ? setEditingUser({
+                        ...editingUser,
+                        firstName: e.target.value,
+                      })
+                    : setNewUser({ ...newUser, firstName: e.target.value })
+                }
+                className="border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Last Name"
+                value={editingUser ? editingUser.lastName : newUser.lastName}
+                onChange={(e) =>
+                  editingUser
+                    ? setEditingUser({
+                        ...editingUser,
+                        lastName: e.target.value,
+                      })
+                    : setNewUser({ ...newUser, lastName: e.target.value })
+                }
+                className="border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              <input
+                type="tel"
+                placeholder="Phone Number"
+                value={editingUser ? editingUser.phoneNumber || "" : newUser.phoneNumber}
+                onChange={(e) =>
+                  editingUser
+                    ? setEditingUser({
+                        ...editingUser,
+                        phoneNumber: e.target.value,
+                      })
+                    : setNewUser({ ...newUser, phoneNumber: e.target.value })
+                }
+                className="border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder={
+                    editingUser
+                      ? "New Password (leave blank to keep current)"
+                      : "Password *"
+                  }
+                  value={
+                    editingUser ? editingUser.password || "" : newUser.password
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (editingUser) {
+                      setEditingUser({ ...editingUser, password: value });
+                    } else {
+                      setNewUser({ ...newUser, password: value });
+                    }
+                    if (!editingUser || value.length > 0) {
+                      setPasswordError(validatePassword(value));
+                    } else {
+                      setPasswordError("");
+                    }
+                  }}
+                  className="border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm pr-10 w-full"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              
+              {/* Dynamic Role Select */}
+              <select
+                value={editingUser ? (editingUser.roles[0] || "") : (newUser.roles[0] || "")}
+                onChange={(e) => {
+                  const selectedRole = e.target.value;
+                  if (editingUser) {
+                    setEditingUser({
+                      ...editingUser,
+                      roles: selectedRole ? [selectedRole] : []
+                    });
+                  } else {
+                    setNewUser({
+                      ...newUser,
+                      roles: selectedRole ? [selectedRole] : []
+                    });
+                  }
+                }}
+                className="border border-gray-300 p-2.5 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              >
+                <option value="">Select Role *</option>
+                {availableRoles.map((role) => (
+                  <option key={role.name} value={role.name}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Dynamic Branch Select */}
+              <select
+                value={editingUser ? editingUser.branch : newUser.branch}
+                onChange={(e) =>
+                  editingUser
+                    ? setEditingUser({
+                        ...editingUser,
+                        branch: e.target.value,
+                      })
+                    : setNewUser({ ...newUser, branch: e.target.value })
+                }
+                className="border border-gray-300 p-2.5 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              >
+                <option value="">Select Branch *</option>
+                {availableBranches.map((branch) => (
+                  <option key={branch.id} value={branch.branchName}>
+                    {branch.branchName} ({branch.branchCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {passwordError && (
+              <p className="text-red-600 text-sm mt-3 flex items-center gap-1">
+                <MinusCircle className="w-4 h-4" /> {passwordError}
+              </p>
+            )}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={editingUser ? handleUpdateUser : handleCreateUser}
+                className="bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                disabled={
+                  (editingUser
+                    ? !editingUser.username ||
+                      !editingUser.roles.length ||
+                      !editingUser.branch
+                    : !newUser.username ||
+                      !newUser.password ||
+                      !newUser.roles.length ||
+                      !newUser.branch) ||
+                  passwordError !== "" ||
+                  createUserMutation.isPending ||
+                  updateUserMutation.isPending
+                }
+              >
+                {createUserMutation.isPending || updateUserMutation.isPending ? (
+                  editingUser ? (
+                    "Updating..."
+                  ) : (
+                    "Creating..."
+                  )
+                ) : editingUser ? (
+                  <>
+                    <Edit className="w-4 h-4" /> Update User
+                  </>
                 ) : (
-                  "Creating..."
-                )
-              ) : editingUser ? (
-                <>
-                  <Edit className="w-5 h-5" /> Update User
-                </>
-              ) : (
-                <>
-                  <Plus className="w-5 h-5" /> Create User
-                </>
-              )}
-            </button>
-            {editingUser && (
+                  <>
+                    <Plus className="w-4 h-4" /> Create User
+                  </>
+                )}
+              </button>
               <button
                 onClick={() => {
-                  setEditingUser(null);
-                  setPasswordError("");
+                  resetUserForm();
+                  setIsFormVisible(false);
                 }}
-                className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition duration-300 ease-in-out shadow-md"
+                className="bg-gray-500 text-white px-4 py-2.5 rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
               >
                 Cancel
               </button>
-            )}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Search Bar */}
-        <div className="mb-6 px-8">
-          <div className="relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search users by username, name, or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
-            />
-          </div>
-        </div>
-
-        {/* Users Table */}
-        <div className="overflow-x-auto px-8 pb-8">
-          <table className="w-full border-collapse rounded-lg overflow-hidden">
-            <thead>
-              <tr className="bg-gray-100 text-gray-700 uppercase text-sm leading-normal">
-                <th className="py-3 px-6 text-left border-b border-gray-200">
-                  User Info
+      {/* Users Table */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Full name
                 </th>
-                <th className="py-3 px-6 text-left border-b border-gray-200">
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Role
                 </th>
-                <th className="py-3 px-6 text-left border-b border-gray-200">
-                  Branch
-                </th>
-                <th className="py-3 px-6 text-left border-b border-gray-200">
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="py-3 px-6 text-left border-b border-gray-200">
-                  Activity
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Joined date
                 </th>
-                <th className="py-3 px-6 text-left border-b border-gray-200">
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  2F Auth
+                </th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="text-gray-600 text-sm font-light">
+            <tbody className="divide-y divide-gray-200">
               {filteredUsers.map((user) => {
-                const userRole = SYSTEM_ROLES.find((r) => r.id === user.roleId);
-                const userBranch = branches.find(
-                  (b) => b.code === user.branchCode
-                );
+                const isCurrentUser = currentUser?.id === String(user.id);
+                const userStatus = user.locked ? "Locked" : user.isActive ? "Active" : "Inactive";
+                const fullName = `${user.firstName} ${user.lastName}`;
+                const primaryRole = user.roles[0] ? user.roles[0] : "No Role";
+
                 return (
-                  <tr
-                    key={user.id}
-                    className="border-b border-gray-200 hover:bg-gray-50 transition duration-150"
-                  >
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-gray-800">
-                          {user.username}
-                        </span>
-                        <span className="text-gray-500 text-xs">
-                          {user.firstName && user.lastName
-                            ? `${user.firstName} ${user.lastName}`
-                            : "No name provided"}
-                        </span>
-                        {user.email && (
-                          <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                            <Mail className="w-3 h-3" />
-                            {user.email}
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <MonogramAvatar
+                          firstName={user.firstName}
+                          lastName={user.lastName}
+                          username={user.username}
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {fullName}
                           </div>
-                        )}
-                        {user.phoneNumber && (
-                          <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                            <Phone className="w-3 h-3" />
-                            {user.phoneNumber}
+                          <div className="text-xs text-gray-500">
+                            {user.username}
                           </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                        {userRole?.displayName || "Unknown Role"}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{user.branchCode}</span>
-                        <span className="text-gray-500 text-xs">
-                          {userBranch?.name || "Unknown Branch"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col gap-1">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            user.locked
-                              ? "bg-red-100 text-red-800"
-                              : user.isActive
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {user.locked
-                            ? "Locked"
-                            : user.isActive
-                            ? "Active"
-                            : "Inactive"}
-                        </span>
-                        {user.attempts > 0 && (
-                          <span className="text-xs text-orange-600 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            {user.attempts} failed attempts
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col text-xs text-gray-500">
-                        {user.lastLogin ? (
-                          <div className="flex items-center gap-1">
-                            <Activity className="w-3 h-3" />
-                            Last:{" "}
-                            {new Date(user.lastLogin).toLocaleDateString()}
-                          </div>
-                        ) : (
-                          <span>Never logged in</span>
-                        )}
-                        <div className="flex items-center gap-1 mt-1">
-                          <Calendar className="w-3 h-3" />
-                          Created:{" "}
-                          {new Date(user.createdAt).toLocaleDateString()}
                         </div>
-                        {user.createdBy && (
-                          <span className="text-xs">by {user.createdBy}</span>
-                        )}
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {currentUser?.permissions?.users?.includes(
-                          "update"
-                        ) && (
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-600">{user.email}</div>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-600">{primaryRole}</div>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <StatusBadge status={userStatus} />
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-600">
+                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        }) : "N/A"}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <TwoFABadge enabled={true} />
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        {canUpdateUsers && (
                           <button
                             onClick={() => {
-                              setEditingUser({ ...user, password: "" });
+                              const userToEdit = { ...user, password: "" };
+                              setEditingUser(userToEdit);
                               setPasswordError("");
+                              setIsFormVisible(true);
                             }}
-                            className="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1 bg-blue-500 text-white hover:bg-blue-600 transition duration-200"
-                            disabled={updateUserMutation.isPending}
+                            className="text-gray-400 hover:text-blue-600 transition-colors p-1"
+                            title="Edit User"
                           >
-                            <Edit className="w-3 h-3" /> Edit
+                            <Edit className="w-4 h-4" />
                           </button>
                         )}
-                        {currentUser?.permissions?.users?.includes(
-                          "lock_unlock"
-                        ) && (
+                        {canDeleteUsers && !isCurrentUser && (
                           <button
-                            onClick={() =>
-                              handleToggleUserLock(user.id, user.locked)
-                            }
-                            className={`px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition duration-200 ${
-                              user.locked
-                                ? "bg-green-500 text-white hover:bg-green-600"
-                                : "bg-red-500 text-white hover:bg-red-600"
-                            }`}
-                            disabled={
-                              lockUserMutation.isPending ||
-                              unlockUserMutation.isPending
-                            }
+                            onClick={() => handleDeleteUser(user.id, user.username)}
+                            className="text-gray-400 hover:text-red-600 transition-colors p-1"
+                            title="Delete User"
                           >
-                            {user.locked ? (
-                              <>
-                                <Unlock className="w-3 h-3" /> Unlock
-                              </>
-                            ) : (
-                              <>
-                                <Lock className="w-3 h-3" /> Lock
-                              </>
-                            )}
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
-                        {currentUser?.permissions?.users?.includes(
-                          "update"
-                        ) && (
-                          <button
-                            onClick={() => handleResetPassword(user.id)}
-                            className="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1 bg-purple-500 text-white hover:bg-purple-600 transition duration-200"
-                            disabled={resetPasswordMutation.isPending}
-                          >
-                            <RefreshCw className="w-3 h-3" /> Reset PW
-                          </button>
-                        )}
-                        {currentUser?.permissions?.users?.includes("delete") &&
-                          currentUser.id !== user.id && (
-                            <button
-                              onClick={() =>
-                                handleDeleteUser(user.id, user.username)
-                              }
-                              className="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1 bg-gray-200 text-gray-700 hover:bg-gray-300 transition duration-200"
-                              disabled={deleteUserMutation.isPending}
-                            >
-                              <Trash2 className="w-3 h-3" /> Delete
-                            </button>
-                          )}
                       </div>
                     </td>
                   </tr>
@@ -786,14 +838,31 @@ const filteredUsers = Array.isArray(fechUsers)
               })}
             </tbody>
           </table>
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              {searchTerm
-                ? "No users found matching your search."
-                : "No users found."}
-            </div>
-          )}
         </div>
+
+        {/* Table Footer */}
+        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Rows per page 15
+            </div>
+            <div className="text-sm text-gray-700">
+              1-{filteredUsers.length} of {filteredUsers.length} rows
+            </div>
+          </div>
+        </div>
+
+        {filteredUsers.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p className="text-lg font-medium">No users found</p>
+            <p className="text-sm mt-1">
+              {searchTerm || roleFilter !== "all" || statusFilter !== "all"
+                ? "Try adjusting your search or filters"
+                : "Get started by creating your first user"}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
