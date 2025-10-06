@@ -82,43 +82,33 @@ const ReceiptingPage = () => {
     );
   }, [receipt]);
 
-  // Payment method mapping - ROBUST VERSION
+  // Payment method mapping - FIXED VERSION
   const paymentMethodMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    console.log('Payment methods raw data:', paymentMethods);
-    
-    // If paymentMethods is empty or not working, create default mappings
-    if (!paymentMethods || paymentMethods.length === 0) {
-      console.log('No payment methods from API, using defaults');
-      // Create default payment method mappings
-      const defaultMethods = [
-        { name: 'Cash', id: 1 },
-        { name: 'Card', id: 2 },
-        { name: 'Bank Transfer', id: 3 },
-        { name: 'Mobile Money', id: 4 },
-        { name: 'Check', id: 5 }
-      ];
-      
-      defaultMethods.forEach(method => {
-        map[method.name] = method.id;
-      });
-    } else {
-      // Process actual payment methods from API
+    // Always start with hardcoded values to ensure they work
+    const hardcodedMap: Record<string, number> = {
+      'Cash': 1,
+      'Card': 2,
+      'Bank Transfer': 3,
+      'Mobile Money': 4,
+      'Check': 5
+    };
+
+    // Then try to override with actual API data if available
+    if (paymentMethods && paymentMethods.length > 0) {
+      console.log('Processing API payment methods:', paymentMethods);
       for (const m of paymentMethods) {
-        // Try different possible field names
-        const name = (m.name || m.method || m.paymentMethodName || m.paymentMethod || "").toString().trim();
-        const id = Number(m.id ?? m.paymentMethodId ?? m.paymentMethodID ?? m.methodId);
-        
-        console.log('Processing payment method:', { name, id, raw: m });
+        const name = m.name; // Use 'name' field from your DTO
+        const id = Number(m.id);
         
         if (name && Number.isFinite(id) && id > 0) {
-          map[name] = id;
+          hardcodedMap[name] = id;
+          console.log(`Mapped payment method: ${name} -> ${id}`);
         }
       }
     }
-    
-    console.log('Final payment method map:', map);
-    return map;
+
+    console.log('Final payment method map:', hardcodedMap);
+    return hardcodedMap;
   }, [paymentMethods]);
 
   // Fetch data from API
@@ -136,6 +126,7 @@ const ReceiptingPage = () => {
 
         console.log('Raw revenue data:', revenueData);
         console.log('Raw branches data:', branchesData);
+        console.log('Raw payment methods data:', paymentMethodsData);
         console.log('Raw projects data:', projectsData);
 
         // Process revenue heads data
@@ -166,13 +157,17 @@ const ReceiptingPage = () => {
         let defaultMethod = paymentMethodsArray[0]; 
 
         if (defaultMethod) {
-            const validMethodName = defaultMethod.name || defaultMethod.method;
+            const validMethodName = defaultMethod.name; // Use 'name' field
             setReceipt(prev => ({
                 ...prev,
                 paymentMethod: validMethodName,
             }));
         } else {
-            console.warn("No payment methods found from the API. Payment method dropdown may be empty.");
+            console.warn("No payment methods found from the API. Using default 'Cash'.");
+            setReceipt(prev => ({
+                ...prev,
+                paymentMethod: "Cash",
+            }));
         }
         
       } catch (err: any) {
@@ -201,7 +196,17 @@ const ReceiptingPage = () => {
     }
   }, [searchTerm, members]);
 
-  // Get available options based on payment type and branch - UPDATED VERSION
+  // Debug payment method selection
+  useEffect(() => {
+    console.log('Payment Method Debug:', {
+      selectedPaymentMethod: receipt.paymentMethod,
+      paymentMethodMap: paymentMethodMap,
+      mappedId: paymentMethodMap[receipt.paymentMethod],
+      allPaymentMethods: paymentMethods
+    });
+  }, [receipt.paymentMethod, paymentMethodMap, paymentMethods]);
+
+  // Get available options based on payment type and branch
   const availableOptions = useMemo(() => {
     console.log('Available Options Debug:', {
       branchCode: receipt.branchCode,
@@ -391,20 +396,36 @@ const ReceiptingPage = () => {
     try {
       const selectedBranch = branches.find(b => b.branchCode === receipt.branchCode);
       
+      // Debug payment method mapping
+      console.log('Payment method debug:', {
+        selectedMethod: receipt.paymentMethod,
+        paymentMethodMap: paymentMethodMap,
+        mappedId: paymentMethodMap[receipt.paymentMethod],
+        allPaymentMethods: paymentMethods
+      });
+      
       let paymentMethodId = paymentMethodMap[receipt.paymentMethod];
       
       // Fallback if payment method ID is not found
-      if (isNaN(paymentMethodId)) {
+      if (isNaN(paymentMethodId) || !paymentMethodId) {
         console.warn('Payment method ID not found, using fallback mapping');
         const fallbackMap: Record<string, number> = {
           'Cash': 1,
           'Card': 2,
           'Bank Transfer': 3,
           'Mobile Money': 4,
-          'Check': 5
+          'Check': 5,
+          'Credit Card': 6,
+          'Debit Card': 7,
+          'Online Payment': 8
         };
         paymentMethodId = fallbackMap[receipt.paymentMethod] || 1; // Default to Cash (1)
         console.log('Using fallback payment method ID:', paymentMethodId);
+      }
+
+      // Final validation of paymentMethodId
+      if (!paymentMethodId || isNaN(paymentMethodId)) {
+        throw new Error(`Invalid payment method ID: ${paymentMethodId}. Please check payment method configuration.`);
       }
 
       if (!selectedBranch) {
@@ -467,6 +488,7 @@ const ReceiptingPage = () => {
           amount: parseFloat(receipt.amount),
           currency: receipt.currency,
           branchId: branchId,
+          paymentMethodId: paymentMethodId,
           userId: currentUser?.id || 1,
           transactionDate: new Date().toISOString()
         };
@@ -724,9 +746,9 @@ const ReceiptingPage = () => {
                     className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
                   >
                     {paymentMethods.map((m) => {
-                      const label = m.name || m.method || String(m);
+                      const label = m.name; // Use 'name' field from your DTO
                       return (
-                        <option key={label} value={label}>
+                        <option key={m.id} value={label}>
                           {label}
                         </option>
                       );
