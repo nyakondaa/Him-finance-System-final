@@ -299,6 +299,59 @@ export const getTransactions = (params = {}) =>
   apiClient(`/transactions?${new URLSearchParams(params)}`);
 export const getTransactionById = (id: string) =>
   apiClient(`/transactions/${id}`);
+
+
+export const getTransactionByRrn = (rrn: string) =>
+  apiClient(`/transactions/rrn/${rrn}`);
+
+export const getTransactionsByMemberId = (memberId: number | string) =>
+  apiClient(`/transactions/member/${memberId}`);
+
+export const getTransactionsByBranchId = (branchId: number | string) =>
+  apiClient(`/transactions/branch/${branchId}`);
+
+export const getTransactionsByRevenueHeadId = (revenueHeadId: number | string) =>
+  apiClient(`/transactions/revenue-head/${revenueHeadId}`);
+
+export const getTransactionsByPaymentMethod = (paymentMethodId: number | string) =>
+  apiClient(`/transactions/payment-method/${paymentMethodId}`);
+
+export const getTransactionsByUser = (userId: number | string) =>
+  apiClient(`/transactions/user/${userId}`);
+
+export const getTransactionsByDateRange = (startDate: string, endDate: string) =>
+  apiClient(`/transactions/date-range?startDate=${startDate}&endDate=${endDate}`);
+
+export const getRecentTransactions = (limit: number = 10) =>
+  apiClient(`/transactions/recent?limit=${limit}`);
+
+// --- Transaction Updates --- //
+export const updateTransaction = (id: number | string, data: any) =>
+  apiClient(`/transactions/${id}`, "PUT", data);
+
+export const partialUpdateTransaction = (id: number | string, data: any) =>
+  apiClient(`/transactions/${id}`, "PATCH", data);
+
+// --- Delete Transaction --- //
+export const deleteTransaction = (id: number | string) =>
+  apiClient(`/transactions/${id}`, "DELETE");
+
+// --- Analytics --- //
+export const getTotalAmountByRevenueHead = (revenueHeadId: number | string) =>
+  apiClient(`/transactions/analytics/revenue-head/${revenueHeadId}/total`);
+
+export const getTotalAmountByBranch = (branchId: number | string) =>
+  apiClient(`/transactions/analytics/branch/${branchId}/total`);
+
+export const getTotalAmountByMember = (memberId: number | string) =>
+  apiClient(`/transactions/analytics/member/${memberId}/total`);
+
+export const getTransactionCountByRevenueHead = (revenueHeadId: number | string) =>
+  apiClient(`/transactions/analytics/revenue-head/${revenueHeadId}/count`);
+
+// --- Existence Check --- //
+export const transactionExists = (id: number | string) =>
+  apiClient(`/transactions/${id}/exists`);
 export const createTransaction = (transactionData: {
   memberId: number;
   revenueHeadCode: string;

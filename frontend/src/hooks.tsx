@@ -6,7 +6,8 @@ import {
   getTransactions,
   getMembers,
   getProjects,
-  getBranches
+  getBranches,
+  getPaymentMethods,
 } from "@/services/api";
 import type {
   Account,
@@ -15,13 +16,13 @@ import type {
   RevenueHead,
   ExpenditureHead,
   Member,
-  Project
+  Project,
 } from "@/utils/Types";
 
 // --- Constants ---
 const ACCOUNT_TYPES = [
   "All Accounts",
-  "Income Accounts", 
+  "Income Accounts",
   "Expense Accounts",
 ] as const;
 type AccountType = (typeof ACCOUNT_TYPES)[number];
@@ -48,7 +49,8 @@ const useAccountsData = () => {
         expenditureHeadsRes,
         membersRes,
         projectsRes,
-        branchesRes
+        branchesRes,
+        paymentMethodsRes,
       ] = await Promise.all([
         getTransactions(),
         getRevenueHeads(),
@@ -56,93 +58,120 @@ const useAccountsData = () => {
         getExpenditureHeads(),
         getMembers(),
         getProjects(),
-        getBranches()
+        getBranches(),
+        getPaymentMethods(),
       ]);
 
-      console.log('API Responses:', {
-        transactions: transactionsRes,
-        revenueHeads: revenueHeadsRes,
-        expenditures: expendituresRes,
-        expenditureHeads: expenditureHeadsRes,
-        members: membersRes,
-        projects: projectsRes,
-        branches: branchesRes
-      });
-
       // Handle different response structures
-      const transactionsData = Array.isArray(transactionsRes) ? transactionsRes : transactionsRes?.data || transactionsRes?.transactions || [];
-      const revenueHeadsData = Array.isArray(revenueHeadsRes) ? revenueHeadsRes : revenueHeadsRes?.data || [];
-      const expendituresData = Array.isArray(expendituresRes) ? expendituresRes : expendituresRes?.data || expendituresRes?.expenditures || [];
-      const expenditureHeadsData = Array.isArray(expenditureHeadsRes) ? expenditureHeadsRes : expenditureHeadsRes?.data || [];
-      const membersData = Array.isArray(membersRes) ? membersRes : membersRes?.data || membersRes?.members || [];
-      const projectsData = Array.isArray(projectsRes) ? projectsRes : projectsRes?.data || projectsRes?.projects || [];
-      const branchesData = Array.isArray(branchesRes) ? branchesRes : branchesRes?.data || branchesRes?.branches || [];
+      const transactionsData = Array.isArray(transactionsRes)
+        ? transactionsRes
+        : transactionsRes?.data || transactionsRes?.transactions || [];
+      const revenueHeadsData = Array.isArray(revenueHeadsRes)
+        ? revenueHeadsRes
+        : revenueHeadsRes?.data || [];
+      const expendituresData = Array.isArray(expendituresRes)
+        ? expendituresRes
+        : expendituresRes?.data || expendituresRes?.expenditures || [];
+      const expenditureHeadsData = Array.isArray(expenditureHeadsRes)
+        ? expenditureHeadsRes
+        : expenditureHeadsRes?.data || [];
+      const membersData = Array.isArray(membersRes)
+        ? membersRes
+        : membersRes?.data || membersRes?.members || [];
+      const projectsData = Array.isArray(projectsRes)
+        ? projectsRes
+        : projectsRes?.data || projectsRes?.projects || [];
+      const branchesData = Array.isArray(branchesRes)
+        ? branchesRes
+        : branchesRes?.data || branchesRes?.branches || [];
+      const paymentMethodsData = Array.isArray(paymentMethodsRes)
+        ? paymentMethodsRes
+        : paymentMethodsRes?.data || paymentMethodsRes?.paymentMethods || [];
 
-      // Validate we have the essential data
       if (!revenueHeadsData.length || !expenditureHeadsData.length) {
         throw new Error("Missing essential account data (revenue heads or expenditure heads)");
       }
 
-      // Process transactions with proper type handling
-      const processedTransactions: Transaction[] = transactionsData.map((tx: any) => ({
-        id: tx.id,
-        receiptNumber: tx.receiptNumber || tx.rrn || `TX-${tx.id}`,
-        revenueHeadCode: tx.revenueHeadCode || tx.revenueHead?.code || '',
-        amount: String(tx.amount || 0),
-        branchCode: tx.branchCode || tx.branch?.branchCode || '',
-        transactionDate: tx.transactionDate || tx.createdAt,
-        createdAt: tx.createdAt,
-        currencyCode: tx.currencyCode || tx.currency?.code || 'USD',
-        memberId: tx.memberId || tx.member?.id,
-        notes: tx.notes,
-        paymentMethodId: tx.paymentMethodId || tx.paymentMethod?.id,
-        referenceNumber: tx.referenceNumber,
-        status: tx.status || 'completed',
-        updatedAt: tx.updatedAt,
-        userId: tx.userId || tx.processedBy?.id,
-        branch: tx.branch || { code: tx.branchCode, name: tx.branch?.branchName },
-        currency: tx.currency || { code: tx.currencyCode, name: 'US Dollar' },
-        member: tx.member || { 
-          id: tx.memberId, 
-          firstName: tx.member?.firstName || 'Unknown',
-          lastName: tx.member?.lastName || 'Member'
-        },
-        paymentMethod: tx.paymentMethod || { id: tx.paymentMethodId, name: 'Unknown' },
-        revenueHead: tx.revenueHead || { 
-          code: tx.revenueHeadCode, 
-          name: revenueHeadsData.find((h: RevenueHead) => h.code === tx.revenueHeadCode)?.name || 'Unknown'
-        },
-        user: tx.user || { id: tx.userId, username: 'System' }
-      }));
+      // ✅ Build payment method map
+      const paymentMethodMap = new Map<number, string>();
+      paymentMethodsData.forEach((pm) => {
+        if (pm.id && pm.name) paymentMethodMap.set(pm.id, pm.name);
+      });
 
-      // Process expenditures with proper type handling
-      const processedExpenditures: Expenditure[] = expendituresData.map((exp: any) => ({
-        id: exp.id,
-        voucherNumber: exp.voucherNumber || `VOUCHER-${exp.id}`,
-        expenditureHeadCode: exp.expenditureHeadCode || exp.expenditureHead?.code || '',
-        description: exp.description || 'No description',
-        amount: Number(exp.amount || 0),
-        totalAmount: Number(exp.totalAmount || exp.amount || 0),
-        currencyCode: exp.currencyCode || 'USD',
-        paymentMethodId: exp.paymentMethodId || exp.paymentMethod?.id,
-        branchCode: exp.branchCode || exp.branch?.branchCode || '',
-        expenseDate: exp.expenseDate || exp.createdAt,
-        isRecurring: Boolean(exp.isRecurring),
-        approvalStatus: exp.approvalStatus || 'approved',
-        taxAmount: Number(exp.taxAmount || 0)
-      }));
+      // Process transactions
+      const processedTransactions: Transaction[] = transactionsData.map((tx: any) => {
+        const payerName =
+          tx.payerName ||
+          `${tx.member?.firstName || ""} ${tx.member?.lastName || ""}`.trim() ||
+          "Unknown Customer";
 
-      // Create income accounts from revenue heads
+        const methodName =
+          paymentMethodMap.get(tx.paymentMethodId) || tx.paymentMethod?.name || "Unknown";
+
+        return {
+          id: tx.id,
+          receiptNumber: tx.receiptNumber || tx.rrn || `TX-${tx.id}`,
+          revenueHeadCode: tx.revenueHeadCode || tx.revenueHead?.code || "",
+          amount: String(tx.amount || 0),
+          branchCode: tx.branchCode || tx.branch?.branchCode || "",
+          transactionDate: tx.transactionDate || tx.createdAt,
+          createdAt: tx.createdAt,
+          currencyCode: tx.currencyCode || tx.currency?.code || "USD",
+          memberId: tx.memberId || tx.member?.id,
+          notes: tx.notes,
+          paymentMethodId: tx.paymentMethodId || tx.paymentMethod?.id,
+          paymentMethod: { id: tx.paymentMethodId, name: methodName },
+          referenceNumber: tx.referenceNumber,
+          status: tx.status || "completed",
+          updatedAt: tx.updatedAt,
+          userId: tx.userId || tx.processedBy?.id,
+          branch: tx.branch || { code: tx.branchCode, name: tx.branch?.branchName },
+          currency: tx.currency || { code: tx.currencyCode, name: "US Dollar" },
+          member: tx.member || {
+            id: tx.memberId,
+            firstName: tx.member?.firstName || "Unknown",
+            lastName: tx.member?.lastName || "Member",
+          },
+          revenueHead: tx.revenueHead || {
+            code: tx.revenueHeadCode,
+            name: revenueHeadsData.find((h: RevenueHead) => h.code === tx.revenueHeadCode)?.name || "Unknown",
+          },
+          user: tx.user || { id: tx.userId, username: "System" },
+          payerName,
+        };
+      });
+
+      console.log(processedTransactions)
+
+      // Process expenditures
+      const processedExpenditures: Expenditure[] = expendituresData.map((exp: any) => {
+        const methodName =
+          paymentMethodMap.get(exp.paymentMethodId) || exp.paymentMethod?.name || "Unknown";
+
+        return {
+          id: exp.id,
+          voucherNumber: exp.voucherNumber || `VOUCHER-${exp.id}`,
+          expenditureHeadCode: exp.expenditureHeadCode || exp.expenditureHead?.code || "",
+          description: exp.description || "No description",
+          amount: Number(exp.amount || 0),
+          totalAmount: Number(exp.totalAmount || exp.amount || 0),
+          currencyCode: exp.currencyCode || "USD",
+          paymentMethodId: exp.paymentMethodId || exp.paymentMethod?.id,
+          paymentMethod: { id: exp.paymentMethodId, name: methodName },
+          branchCode: exp.branchCode || exp.branch?.branchCode || "",
+          expenseDate: exp.expenseDate || exp.createdAt,
+          isRecurring: Boolean(exp.isRecurring),
+          approvalStatus: exp.approvalStatus || "approved",
+          taxAmount: Number(exp.taxAmount || 0),
+        };
+
+
+      });
+
+      // Income accounts
       const incomeAccounts: Account[] = revenueHeadsData.map((head: RevenueHead) => {
-        const accountTransactions = processedTransactions.filter(
-          (tx) => tx.revenueHeadCode === head.code
-        );
-
-        const balance = accountTransactions.reduce(
-          (sum, tx) => sum + parseFloat(tx.amount),
-          0
-        );
-
+        const accountTransactions = processedTransactions.filter((tx) => tx.revenueHeadCode === head.code);
+        const balance = accountTransactions.reduce((sum, tx) => sum + parseFloat(tx.amount), 0);
         return {
           id: `income-${head.code}`,
           accountName: head.name,
@@ -154,21 +183,14 @@ const useAccountsData = () => {
         };
       });
 
-      // Create expense accounts from expenditure heads
+      // Expense accounts
       const expenseAccounts: Account[] = expenditureHeadsData.map((head: ExpenditureHead) => {
-        const accountExpenditures = processedExpenditures.filter(
-          (exp) => exp.expenditureHeadCode === head.code
-        );
-
-        const balance = accountExpenditures.reduce(
-          (sum, exp) => sum + exp.totalAmount,
-          0
-        );
-
+        const accountExpenditures = processedExpenditures.filter((exp) => exp.expenditureHeadCode === head.code);
+        const balance = accountExpenditures.reduce((sum, exp) => sum + exp.totalAmount, 0);
         return {
           id: `expense-${head.code}`,
           accountName: head.name,
-          balance: String(-balance), // negative for expenses
+          balance: String(-balance),
           debitBalance: 0,
           creditBalance: balance,
           expenditures: accountExpenditures,
@@ -176,20 +198,14 @@ const useAccountsData = () => {
         };
       });
 
-      const allAccounts = [...incomeAccounts, ...expenseAccounts];
-
-      // Set state with processed data
-      setAccounts(allAccounts);
+      setAccounts([...incomeAccounts, ...expenseAccounts]);
       setExpenditures(processedExpenditures);
       setTransactions(processedTransactions);
       setMembers(membersData);
       setProjects(projectsData);
-
     } catch (err) {
       console.error("Error fetching accounts data:", err);
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
     } finally {
       setLoading(false);
     }
@@ -199,7 +215,7 @@ const useAccountsData = () => {
     fetchData();
   }, [fetchData]);
 
-  // Compute total balances using useMemo for efficiency
+  // Compute total balances
   const { totalIncomeBalance, totalExpenseBalance, totalBalance } = useMemo(() => {
     const income = accounts
       .filter((acc) => acc.type === "income")
@@ -209,32 +225,30 @@ const useAccountsData = () => {
       .filter((acc) => acc.type === "expense")
       .reduce((sum, acc) => sum + Math.abs(parseFloat(acc.balance || "0")), 0);
 
-    const total = income - expenses;
-
     return {
       totalIncomeBalance: income,
       totalExpenseBalance: expenses,
-      totalBalance: total,
+      totalBalance: income - expenses,
     };
   }, [accounts]);
 
   // Additional metrics
   const metrics = useMemo(() => {
     const totalTransactions = transactions.length + expenditures.length;
-    const activeMembers = members.filter(m => m.isActive).length;
-    const incomeAccounts = accounts.filter(acc => acc.type === 'income').length;
-    const expenseAccounts = accounts.filter(acc => acc.type === 'expense').length;
-    const totalProjectContributions = transactions.filter(tx => 
-      tx.revenueHeadCode?.includes('PROJECT') || tx.notes?.includes('project')
+    const activeMembers = members.filter((m) => m.isActive).length;
+    const incomeAccountsCount = accounts.filter((acc) => acc.type === "income").length;
+    const expenseAccountsCount = accounts.filter((acc) => acc.type === "expense").length;
+    const totalProjectContributions = transactions.filter(
+      (tx) => tx.revenueHeadCode?.includes("PROJECT") || tx.notes?.includes("project")
     ).length;
 
     return {
       totalTransactions,
       activeMembers,
-      incomeAccounts,
-      expenseAccounts,
+      incomeAccounts: incomeAccountsCount,
+      expenseAccounts: expenseAccountsCount,
       totalProjectContributions,
-      netProfit: totalIncomeBalance - totalExpenseBalance
+      netProfit: totalIncomeBalance - totalExpenseBalance,
     };
   }, [transactions, expenditures, members, accounts, totalIncomeBalance, totalExpenseBalance]);
 
@@ -250,7 +264,7 @@ const useAccountsData = () => {
     totalIncomeBalance,
     totalExpenseBalance,
     totalBalance,
-    metrics
+    metrics,
   };
 };
 
