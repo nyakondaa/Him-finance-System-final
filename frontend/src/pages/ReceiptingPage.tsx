@@ -1,29 +1,44 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react";
-import {
-  getRevenueHeads,
-  getBranches,
-  getMembers,
-  generateReceipt,
-  getCurrencies,
-  getPaymentMethods,
-  getProjects,
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { 
+  getRevenueHeads, 
+  getBranches, 
+  getMembers, 
+  generateReceipt, 
+  getPaymentMethods, 
+  getProjects, 
   createContribution,
-
+  createTransaction 
 } from "@/services/api";
 import useAuth from "@/hooks/useAuth";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { 
+  FileText, 
+  User, 
+  DollarSign, 
+  Building, 
+  CreditCard, 
+  Search, 
+  Printer,
+  Loader2,
+  Target,
+  TrendingUp,
+  CheckCircle,
+  AlertCircle
+} from "lucide-react";
 import type { Member } from "@/utils/Types";
+
+// Hardcoded currencies
+const hardcodedCurrencies = [
+  { code: "USD", name: "US Dollar", symbol: "$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "ZAR", name: "South African Rand", symbol: "R" }
+];
 
 const ReceiptingPage = () => {
   const printContentRef = useRef<HTMLDivElement | null>(null);
-  const currentUser = useAuth();
+  const { currentUser } = useAuth();
 
   // Form state
   const [receipt, setReceipt] = useState({
@@ -33,47 +48,29 @@ const ReceiptingPage = () => {
     currency: "USD",
     paymentMethod: "Cash",
     branchCode: "",
+    paymentType: "revenue", // 'revenue' or 'project'
   });
 
-  // Printing state
+  // UI state
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [toast, setToast] = useState({ visible: false, message: "", type: "success" });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState({ title: "", message: "", type: "info" as "info" | "error" | "success" });
 
   // Data state
   const [revenueHeads, setRevenueHeads] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
-  const [loggedInUser, setLoggedInUser] = useState(null);
-  const [currencies, setCurrencies] = useState<string[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
 
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-
-  // Toast state
-  const [toast, setToast] = useState({
-    visible: false,
-    message: "",
-    type: "success",
-  });
-
-  // Modal state
-  type ModalState = {
-    title: string;
-    message: string;
-    type: "info" | "error" | "success";
-  };
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState<ModalState>({
-    title: "",
-    message: "",
-    type: "info",
-  });
-
-  // Constants
+  // Use hardcoded currencies
+  const currencies = hardcodedCurrencies;
 
   // Check if all required fields are filled
   const isFormComplete = useMemo(() => {
@@ -86,50 +83,64 @@ const ReceiptingPage = () => {
     );
   }, [receipt]);
 
+  // Payment method mapping
+  const paymentMethodMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const m of paymentMethods) {
+      const name = (m.name || m.method || "").toString();
+      const id = Number(m.id ?? m.paymentMethodId);
+      if (name && Number.isFinite(id)) map[name] = id;
+    }
+    return map;
+  }, [paymentMethods]);
+
   // Fetch data from API
   useEffect(() => {
-    setLoggedInUser((currentUser as any)?.currentUser?.username || null);
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [
-          revenueData,
-          branchesData,
-          membersData,
-          currenciesData,
-          paymentMethodsData,
-        ] = await Promise.all([
+        const [revenueData, branchesData, membersData, paymentMethodsData, projectsData] = await Promise.all([
           getRevenueHeads(),
           getBranches(),
           getMembers(),
-          getCurrencies(),
           getPaymentMethods(),
+          getProjects(),
         ]);
+
+        console.log('Raw branches data:', branchesData); // Debug log
+
         setRevenueHeads(revenueData || []);
-        setBranches(branchesData || []);
-        const membersArray = Array.isArray(membersData)
-          ? membersData
-          : (membersData && (membersData as any).members) || [];
-        setMembers(membersArray || []);
-        setFilteredMembers([]);
-        setCurrencies(
-          Array.isArray(currenciesData)
-            ? currenciesData.map((c: any) => c.code || c).filter(Boolean)
-            : []
-        );
-        setPaymentMethods(
-          Array.isArray(paymentMethodsData) ? paymentMethodsData : []
-        );
-        setIsLoading(false);
+        
+        // Process branches data properly
+        const processedBranches = Array.isArray(branchesData) ? branchesData : [];
+        setBranches(processedBranches);
+        
+        const membersArray = Array.isArray(membersData) ? membersData : (membersData && (membersData as any).members) || [];
+        setMembers(membersArray);
+        setPaymentMethods(Array.isArray(paymentMethodsData) ? paymentMethodsData : []);
+        
+        // Transform projects data
+        const transformedProjects = Array.isArray(projectsData) ? projectsData.map(project => ({
+          id: project.id,
+          title: project.title || project.name,
+          revenueHeadCode: project.revenueHeadCode,
+          currentFunding: project.currentFunding || 0,
+          fundingGoal: project.fundingGoal || 0,
+          status: project.status,
+          branchId: project.branchId
+        })) : [];
+        setProjects(transformedProjects);
+        
       } catch (err: any) {
         console.error("Failed to fetch data:", err);
-        setError(err.message);
+        showModal(err.message || "Failed to load system data", "Data Loading Error", "error");
+      } finally {
         setIsLoading(false);
-        showModal(err.message, "Data Loading Error", "error");
       }
     };
+
     fetchData();
-  }, [currentUser]);
+  }, []);
 
   // Filter members based on search term
   useEffect(() => {
@@ -139,14 +150,25 @@ const ReceiptingPage = () => {
     } else {
       const term = searchTerm.toLowerCase();
       const filtered = members.filter((member) => {
-        const name = `${member.firstName || ""} ${member.lastName || ""}`
-          .trim()
-          .toLowerCase();
+        const name = `${member.firstName || ""} ${member.lastName || ""}`.trim().toLowerCase();
         return name.includes(term);
       });
       setFilteredMembers(filtered);
     }
   }, [searchTerm, members]);
+
+  // Get available options based on payment type and branch
+  const availableOptions = useMemo(() => {
+    if (receipt.paymentType === 'project') {
+      return projects.filter(project => 
+        !receipt.branchCode || project.branchId?.toString() === receipt.branchCode
+      );
+    } else {
+      return revenueHeads.filter(head => 
+        !receipt.branchCode || head.branchCode === receipt.branchCode
+      );
+    }
+  }, [receipt.paymentType, receipt.branchCode, projects, revenueHeads]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -154,32 +176,39 @@ const ReceiptingPage = () => {
   };
 
   const selectMember = (member: Member) => {
-    setReceipt({
-      ...receipt,
-      payerName: `${member.firstName} ${member.lastName}`,
-    });
+    setReceipt({ ...receipt, payerName: `${member.firstName} ${member.lastName}` });
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setSelectedMember(member);
     setShowMemberDropdown(false);
   };
 
-  const showModal = (
-    message: string,
-    title: string,
-    type: "info" | "error" | "success"
-  ) => {
+  const handlePaymentTypeChange = (type: 'revenue' | 'project') => {
+    setReceipt({ 
+      ...receipt, 
+      paymentType: type,
+      revenueHeadCode: "" // Reset selection when changing type
+    });
+  };
+
+  const handleBranchChange = (branchCode: string) => {
+    setReceipt(prev => ({ 
+      ...prev, 
+      branchCode,
+      // Only clear revenue head if the current selection is not available in the new branch
+      revenueHeadCode: prev.revenueHeadCode && availableOptions.some(opt => 
+        (opt.code || opt.id) === prev.revenueHeadCode
+      ) ? prev.revenueHeadCode : ""
+    }));
+  };
+
+  const showModal = (message: string, title: string, type: "info" | "error" | "success") => {
     setModalContent({ message, title, type });
     setIsModalOpen(true);
   };
 
-  const showToast = (
-    message: string,
-    type: "success" | "error" | "info" = "success"
-  ) => {
+  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
     setToast({ visible: true, message, type });
-    window.setTimeout(() => {
-      setToast((prev) => ({ ...prev, visible: false }));
-    }, 2500);
+    setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
   };
 
   const handlePdfPrint = useCallback(async () => {
@@ -192,22 +221,16 @@ const ReceiptingPage = () => {
       const canvas = await html2canvas(element, { scale: 2 });
       const imgData = canvas.toDataURL("image/png");
 
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: [80, 297],
-      });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [80, 297] });
       const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
 
-      // Create a blob
       const pdfBlob = pdf.output("blob");
       const blobUrl = URL.createObjectURL(pdfBlob);
 
-      // Open in iframe for printing
       const iframe = document.createElement("iframe");
       iframe.style.position = "fixed";
       iframe.style.right = "0";
@@ -220,422 +243,253 @@ const ReceiptingPage = () => {
       iframe.onload = () => {
         const cw = iframe.contentWindow;
         cw?.focus();
-        // Prefer event-based cleanup to avoid closing the dialog prematurely
         const cleanup = () => {
-          try {
-            document.body.removeChild(iframe);
-          } catch {}
+          try { document.body.removeChild(iframe); } catch {}
           URL.revokeObjectURL(blobUrl);
           setIsPrinting(false);
         };
-        // afterprint handler (best-effort; may not fire in all browsers)
         if (cw && "onafterprint" in cw) {
           (cw as any).onafterprint = cleanup;
         }
-        // Fallback cleanup in case afterprint doesn't fire
         setTimeout(cleanup, 15000);
         cw?.print();
       };
 
-      showToast("Receipt ready to print.");
-      setReceipt({
-        payerName: "",
-        revenueHeadCode: "",
-        amount: "",
-        currency: "USD",
-        paymentMethod: "Cash",
-        branchCode: "",
-      });
-      setSearchTerm("");
+      showToast("Receipt ready for printing");
+      
     } catch (err) {
-      console.error(err);
-      showModal(
-        "Failed to generate and print PDF. Please try again.",
-        "Printing Error",
-        "error"
-      );
+      console.error("Printing error:", err);
+      showModal("Failed to generate and print PDF. Please try again.", "Printing Error", "error");
+      setIsPrinting(false);
     }
-  }, [receipt]);
+  }, []);
 
-  // Handle form submission and transaction creation
-
-  const paymentMethodMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const m of paymentMethods) {
-      const name = (m.name || m.method || "").toString();
-      const id = Number(m.id ?? m.paymentMethodId);
-      if (name && Number.isFinite(id)) map[name] = id;
-    }
-    return map;
-  }, [paymentMethods]);
-
-  interface ProjectData {
-    id: number;
-    name: string;
-    currentAmount: number;
-    targetAmount: number;
-    status: string;
-    revenueHeadCode?: string;
-    totalCollected: number | null;
-  }
-
-  // services/api.js
-  const getProjectsData = async (): Promise<ProjectData[]> => {
-    try {
-      console.log("🔄 API: Fetching projects...");
-
-      const response = await getProjects();
-      console.log("📦 API: Raw response:", response);
-
-      // Map the API response to match ProjectData interface
-      const mappedProjects = response.map((project: any) => ({
-        id: project.id,
-        name: project.name,
-        currentAmount: project.totalCollected || 0, // Use totalCollected from your backend
-        targetAmount: parseFloat(project.targetAmount) || 0,
-        status: project.status,
-        revenueHeadCode: project.revenueHeadCode || undefined,
-        totalCollected: project.totalCollected || 0,
-      }));
-
-      console.log(" API: Mapped projects:", mappedProjects);
-      return mappedProjects;
-    } catch (error) {
-      console.error("❌ API: Error fetching projects:", error);
-      throw error;
-    }
+  const resetForm = () => {
+    setReceipt({
+      payerName: "",
+      revenueHeadCode: "",
+      amount: "",
+      currency: "USD",
+      paymentMethod: "Cash",
+      branchCode: "",
+      paymentType: "revenue",
+    });
+    setSearchTerm("");
+    setSelectedMember(null);
   };
 
   const handleGenerateReceipt = async () => {
     if (!isFormComplete) {
-      return showModal(
-        "Please fill in all required fields.",
-        "Validation Error",
-        "error"
-      );
+      return showModal("Please fill in all required fields.", "Validation Error", "error");
     }
     if (!selectedMember) {
       return showModal("Please select a member.", "Validation Error", "error");
     }
 
     try {
-      // Generate the receipt first
-      const receiptResult = await generateReceipt({
-        memberId: selectedMember.id,
-        revenueHeadCode: receipt.revenueHeadCode,
-        amount: parseFloat(receipt.amount),
-        currencyCode: receipt.currency,
-        paymentMethodId: paymentMethodMap[receipt.paymentMethod],
-        transactionDate: new Date().toISOString(),
-      });
+      const selectedBranch = branches.find(b => b.branchCode === receipt.branchCode);
+      const paymentMethodId = paymentMethodMap[receipt.paymentMethod];
 
-      // Check if the revenue head code is from a project
-      const projects = await getProjectsData();
-      const project = projects.find(
-        (p) => p.revenueHeadCode === receipt.revenueHeadCode
-      );
-
-      if (project) {
-        console.log(`Receipt is for project: ${project.name}`);
-
-        try {
-          // Add to member_contributions table
-          const contributionData = {
-            memberId: selectedMember.id,
-            projectId: project.id,
-            amount: parseFloat(receipt.amount),
-            currencyCode: receipt.currency,
-            paymentMethodId: paymentMethodMap[receipt.paymentMethod],
-            referenceNumber: receiptResult.receiptNumber,
-            notes: `Contribution for project: ${project.name}`,
-            paymentDate: new Date().toISOString(),
-          };
-
-          console.log("Creating contribution with data:", contributionData);
-          console.log(
-            "Payload sent to backend:",
-            JSON.stringify(contributionData, null, 2)
-          );
-
-          const contributionResult = await createContribution(contributionData);
-          console.log(
-            "Contribution recorded successfully:",
-            contributionResult
-          );
-
-          console.log("updated project:", project);
-        
-          showToast(
-            "Receipt generated and contribution recorded successfully."
-          );
-        } catch (contributionError: any) {
-          console.error("Contribution recording error:", contributionError);
-
-          let userMessage =
-            contributionError.message || "Failed to record contribution";
-
-          // Handle specific error cases
-          if (userMessage.includes("same branch")) {
-            userMessage = `Cannot record contribution: The member and project belong to different branches.`;
-          } else if (userMessage.includes("inactive projects")) {
-            userMessage = `Cannot record contribution: The project is inactive.`;
-          } else if (
-            userMessage.includes("Member not found") ||
-            userMessage.includes("Project not found")
-          ) {
-            userMessage = `Cannot record contribution: ${userMessage}`;
-          } else if (
-            userMessage.includes("Currency not found") ||
-            userMessage.includes("Payment method not found")
-          ) {
-            userMessage = `Cannot record contribution: ${userMessage}`;
-          }
-
-          showModal(
-            `Receipt was generated successfully but contribution recording failed: ${userMessage}`,
-            "Partial Success",
-            "error"
-          );
-        }
-      } else {
-        console.log("Receipt is not for a project.");
-        showToast("Receipt generated successfully.");
+      if (!selectedBranch) {
+        throw new Error("Selected branch not found");
       }
 
+      if (receipt.paymentType === 'project') {
+        // Handle project contribution
+        const selectedProject = projects.find(p => 
+          p.revenueHeadCode === receipt.revenueHeadCode || p.id.toString() === receipt.revenueHeadCode
+        );
+
+        if (!selectedProject) {
+          throw new Error("Selected project not found");
+        }
+
+        const contributionData = {
+          projectId: selectedProject.id,
+          memberId: selectedMember.id,
+          amount: parseFloat(receipt.amount),
+          branchId: selectedBranch.id,
+          paymentMethodId: paymentMethodId,
+          processedByUserId: currentUser?.id || 1 // Use current user ID or default
+        };
+
+        console.log("Creating project contribution:", contributionData);
+        await createContribution(contributionData);
+        showToast(`Contribution to ${selectedProject.title} recorded successfully`);
+
+      } else {
+        // Handle revenue head transaction
+        const selectedRevenueHead = revenueHeads.find(r => r.code === receipt.revenueHeadCode);
+
+        if (!selectedRevenueHead) {
+          throw new Error("Selected revenue head not found");
+        }
+
+        const transactionData = {
+          memberId: selectedMember.id,
+          revenueHeadId: selectedRevenueHead.id,
+          amount: parseFloat(receipt.amount),
+          currency: receipt.currency,
+          branchId: selectedBranch.id,
+          userId: currentUser?.id || 1, // Use current user ID or default
+          transactionDate: new Date().toISOString()
+        };
+
+        console.log("Creating revenue transaction:", transactionData);
+        await createTransaction(transactionData);
+        showToast(`Payment for ${selectedRevenueHead.name} recorded successfully`);
+      }
+
+      // Generate and print receipt
       await handlePdfPrint();
+      
+      // Reset form after successful submission
+      setTimeout(resetForm, 1000);
+
     } catch (err: any) {
-      console.error("Main error:", err);
-      showModal(err.message || "Failed to generate receipt", "Error", "error");
+      console.error("Transaction error:", err);
+      showModal(err.message || "Failed to process transaction", "Transaction Error", "error");
     }
   };
 
-  const availableRevenueHeads = receipt.branchCode
-    ? revenueHeads.filter((r) => r.branchCode === receipt.branchCode)
-    : revenueHeads;
-
-  const LoadingSpinner = () => (
-    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-  );
-
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <LoadingSpinner />
-          <p className="mt-4 text-gray-600">Loading system data...</p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Loading system data...</p>
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center text-red-600 p-8 bg-gray-50 min-h-screen flex flex-col items-center justify-center">
-        <div className="w-16 h-16 mb-4 rounded-full bg-red-100 flex items-center justify-center">
-          <svg
-            className="w-8 h-8 text-red-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
-        </div>
-        <h2 className="text-xl font-semibold mb-4">Error Loading Data</h2>
-        <p className="text-sm mb-6">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-        >
-          <svg
-            className="w-4 h-4 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            ></path>
-          </svg>
-          Retry
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col p-4">
-      {/* Hidden print content for browser printing */}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      {/* Hidden print content */}
       <div
         ref={printContentRef}
-        className="print-container absolute top-0 left-0 w-[80mm] p-2"
-        style={{
-          position: "absolute",
-          top: -9999,
-          left: -9999,
-          color: "black",
-          backgroundColor: "white",
-        }}
+        className="absolute top-0 left-0 w-[80mm] p-2"
+        style={{ position: 'absolute', top: -9999, left: -9999, color: 'black', backgroundColor: 'white' }}
       >
         <div className="receipt font-mono text-sm leading-tight text-center">
           <div className="font-bold mb-2">HIM Finance System</div>
           <div>================================</div>
-          <div>
-            <span className="bold font-bold">Receipt #:</span>{" "}
-            {"RC" + Math.floor(100000 + Math.random() * 900000)}
-          </div>
-          <div>
-            <span className="bold font-bold">Payer:</span>{" "}
-            {receipt.payerName || "---"}
-          </div>
-          <div>
-            <span className="bold font-bold">Revenue:</span>{" "}
-            {revenueHeads.find((r) => r.code === receipt.revenueHeadCode)
-              ?.name || "---"}
-          </div>
-          <div>
-            <span className="bold font-bold">Amount:</span> {receipt.currency}{" "}
-            {(parseFloat(receipt.amount) || 0).toFixed(2)}
-          </div>
-          <div>
-            <span className="bold font-bold">Payment:</span>{" "}
-            {receipt.paymentMethod}
-          </div>
-          <div>
-            <span className="bold font-bold">Branch:</span>{" "}
-            {branches.find((b) => b.code === receipt.branchCode)?.name || "---"}
-          </div>
-          <div>
-            <span className="bold font-bold">Operator:</span>{" "}
-            {loggedInUser || "---"}
-          </div>
-          <div>
-            <span className="bold font-bold">Date:</span>{" "}
-            {new Date().toLocaleString()}
-          </div>
-          <div
-            className="divider border-t border-dashed my-2"
-            style={{ borderColor: "black" }}
-          ></div>
+          <div><span className="font-bold">Receipt #:</span> {"RC" + Math.floor(100000 + Math.random() * 900000)}</div>
+          <div><span className="font-bold">Payer:</span> {receipt.payerName || "---"}</div>
+          <div><span className="font-bold">Type:</span> {receipt.paymentType === 'project' ? 'Project Contribution' : 'Revenue Payment'}</div>
+          <div><span className="font-bold">Description:</span> {
+            receipt.paymentType === 'project' 
+              ? projects.find(p => p.revenueHeadCode === receipt.revenueHeadCode)?.title || "---"
+              : revenueHeads.find(r => r.code === receipt.revenueHeadCode)?.name || "---"
+          }</div>
+          <div><span className="font-bold">Amount:</span> {receipt.currency} {(parseFloat(receipt.amount) || 0).toFixed(2)}</div>
+          <div><span className="font-bold">Payment:</span> {receipt.paymentMethod}</div>
+          <div><span className="font-bold">Branch:</span> {branches.find(b => b.branchCode === receipt.branchCode)?.branchName || "---"}</div>
+          <div><span className="font-bold">Operator:</span> {currentUser?.username || "---"}</div>
+          <div><span className="font-bold">Date:</span> {new Date().toLocaleString()}</div>
+          <div className="border-t border-dashed border-black my-2"></div>
           <div className="italic mt-2">Thank you for your support!</div>
           <div>May God bless you abundantly.</div>
-          <div
-            className="divider border-t border-dashed my-2"
-            style={{ borderColor: "black" }}
-          ></div>
+          <div className="border-t border-dashed border-black my-2"></div>
         </div>
       </div>
 
-      <Modal
-        isOpen={isModalOpen}
-        title={modalContent.title}
-        message={modalContent.message}
-        type={modalContent.type}
-        onClose={() => setIsModalOpen(false)}
-      />
-
-      {/* Toast */}
-      {toast.visible && (
-        <div
-          className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-white transition-opacity duration-200 ${
-            toast.type === "error"
-              ? "bg-red-600"
-              : toast.type === "info"
-              ? "bg-blue-600"
-              : "bg-green-600"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
-
-      {/* Printing overlay */}
-      {isPrinting && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center">
-          <div className="bg-white rounded-lg px-6 py-4 shadow">
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-              <div className="text-gray-800">Preparing print...</div>
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-3 bg-white rounded-2xl shadow-lg border border-gray-100">
+                <FileText className="w-7 h-7 text-blue-600" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-gray-900 mb-1">
+                  Receipt Generation
+                </h1>
+                <p className="text-gray-600 text-lg">
+                  Process project contributions and revenue payments
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      )}
 
-      <div className="flex-grow p-4">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-extrabold mb-8 text-gray-800 flex items-center gap-3">
-            <svg
-              className="w-8 h-8 text-black"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              ></path>
-            </svg>
-            Thermal Receipt Printing System
-          </h2>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Form Section */}
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-              <h3 className="text-xl font-semibold mb-6 text-gray-700 flex items-center">
-                <svg
-                  className="w-5 h-5 mr-2 text-black"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  ></path>
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  ></path>
-                </svg>
-                Generate Receipt
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          {/* Form Section */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200 bg-gray-50/80">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Transaction Details
               </h3>
+              <p className="text-gray-600 text-sm mt-1">
+                Select payment type and fill in all required information
+              </p>
+            </div>
 
-              <div className="space-y-5">
+            <div className="p-6 space-y-6">
+              {/* Payment Type Selection */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <TrendingUp className="w-4 h-4" />
+                  Payment Type *
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handlePaymentTypeChange('revenue')}
+                    className={`p-4 rounded-xl border-2 transition-all duration-200 flex items-center gap-3 ${
+                      receipt.paymentType === 'revenue'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <FileText className="w-5 h-5" />
+                    <div className="text-left">
+                      <div className="font-semibold">Revenue Head</div>
+                      <div className="text-sm opacity-75">Tithes, Offerings, etc.</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePaymentTypeChange('project')}
+                    className={`p-4 rounded-xl border-2 transition-all duration-200 flex items-center gap-3 ${
+                      receipt.paymentType === 'project'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    <Target className="w-5 h-5" />
+                    <div className="text-left">
+                      <div className="font-semibold">Project</div>
+                      <div className="text-sm opacity-75">Building funds, etc.</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Payer Search */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <User className="w-4 h-4" />
+                  Payer's Name *
+                </label>
                 <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payer's Name *
-                  </label>
+                  <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={handleSearchChange}
-                    onFocus={() =>
-                      searchTerm.trim() !== "" && setShowMemberDropdown(true)
-                    }
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200"
+                    onFocus={() => searchTerm.trim() !== "" && setShowMemberDropdown(true)}
+                    className="w-full pl-10 pr-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
                     placeholder="Search for member by name"
                   />
-
                   {showMemberDropdown && filteredMembers.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                       {filteredMembers.map((member) => (
                         <div
                           key={member.id}
-                          className="p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                          className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
                           onClick={() => selectMember(member)}
                         >
                           {member.firstName} {member.lastName}
@@ -644,198 +498,234 @@ const ReceiptingPage = () => {
                     </div>
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Revenue Head *
-                  </label>
-                  <select
-                    value={receipt.revenueHeadCode}
-                    onChange={(e) =>
-                      setReceipt({
-                        ...receipt,
-                        revenueHeadCode: e.target.value,
-                      })
-                    }
-                    className="w-full border border-gray-300 p-3 rounded-lg"
-                  >
-                    <option value="">Select Revenue Head</option>
-                    {availableRevenueHeads.map((head) => (
-                      <option key={head.code} value={head.code}>
-                        {head.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount *
-                  </label>
-                  <input
-                    type="number"
-                    value={receipt.amount}
-                    onChange={(e) =>
-                      setReceipt({ ...receipt, amount: e.target.value })
-                    }
-                    className="w-full border border-gray-300 p-3 rounded-lg"
-                    placeholder="Enter amount"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Currency *
-                    </label>
-                    <select
-                      value={receipt.currency}
-                      onChange={(e) =>
-                        setReceipt({ ...receipt, currency: e.target.value })
-                      }
-                      className="w-full border border-gray-300 p-3 rounded-lg"
-                    >
-                      {currencies.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Payment Method *
-                    </label>
-                    <select
-                      value={receipt.paymentMethod}
-                      onChange={(e) =>
-                        setReceipt({
-                          ...receipt,
-                          paymentMethod: e.target.value,
-                        })
-                      }
-                      className="w-full border border-gray-300 p-3 rounded-lg"
-                    >
-                      {paymentMethods.map((m) => {
-                        const label = m.name || m.method || String(m);
-                        return (
-                          <option key={label} value={label}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Branch *
-                  </label>
-                  <select
-                    value={receipt.branchCode}
-                    onChange={(e) =>
-                      setReceipt({ ...receipt, branchCode: e.target.value })
-                    }
-                    className="w-full border border-gray-300 p-3 rounded-lg"
-                  >
-                    <option value="">Select Branch</option>
-                    {branches.map((b) => (
-                      <option key={b.code} value={b.code}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Generate Receipt button */}
-                <button
-                  disabled={!isFormComplete || isPrinting}
-                  onClick={handleGenerateReceipt}
-                  className={`w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center ${
-                    !isFormComplete || isPrinting
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                >
-                  {isPrinting && <LoadingSpinner />}
-                  {!isPrinting && "Generate Receipt"}
-                </button>
               </div>
-            </div>
 
-            {/* Preview Section */}
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-              <h3 className="text-xl font-semibold mb-6 text-gray-700">
+              {/* Revenue Head / Project Selection */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  {receipt.paymentType === 'project' ? <Target className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                  {receipt.paymentType === 'project' ? 'Project *' : 'Revenue Head *'}
+                </label>
+                <select
+                  value={receipt.revenueHeadCode}
+                  onChange={(e) => setReceipt({ ...receipt, revenueHeadCode: e.target.value })}
+                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                >
+                  <option value="">Select {receipt.paymentType === 'project' ? 'Project' : 'Revenue Head'}</option>
+                  {availableOptions.map((option) => (
+                    <option key={option.code || option.id} value={option.code || option.id}>
+                      {option.name || option.title}
+                      {receipt.paymentType === 'project' && ` (${option.status})`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <DollarSign className="w-4 h-4" />
+                  Amount *
+                </label>
+                <input
+                  type="number"
+                  value={receipt.amount}
+                  onChange={(e) => setReceipt({ ...receipt, amount: e.target.value })}
+                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                  placeholder="Enter amount"
+                  step="0.01"
+                />
+              </div>
+
+              {/* Currency & Payment Method */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <DollarSign className="w-4 h-4" />
+                    Currency *
+                  </label>
+                  <select
+                    value={receipt.currency}
+                    onChange={(e) => setReceipt({ ...receipt, currency: e.target.value })}
+                    className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                  >
+                    {currencies.map((currency) => (
+                      <option key={currency.code} value={currency.code}>
+                        {currency.code} - {currency.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <CreditCard className="w-4 h-4" />
+                    Payment Method *
+                  </label>
+                  <select
+                    value={receipt.paymentMethod}
+                    onChange={(e) => setReceipt({ ...receipt, paymentMethod: e.target.value })}
+                    className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                  >
+                    {paymentMethods.map((m) => {
+                      const label = m.name || m.method || String(m);
+                      return (
+                        <option key={label} value={label}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Branch */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Building className="w-4 h-4" />
+                  Branch *
+                </label>
+                <select
+                  value={receipt.branchCode}
+                  onChange={(e) => handleBranchChange(e.target.value)}
+                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                >
+                  <option value="">Select Branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.branchCode}>
+                      {branch.branchName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Generate Button */}
+              <button
+                onClick={handleGenerateReceipt}
+                disabled={!isFormComplete || isPrinting}
+                className="w-full px-8 py-3.5 text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl hover:from-blue-700 hover:to-blue-800 shadow-lg flex items-center gap-2 font-medium transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:transform-none disabled:hover:scale-100 justify-center"
+              >
+                {isPrinting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-4 h-4" />
+                    Process & Print Receipt
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Preview Section */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200 bg-gray-50/80">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
                 Receipt Preview
               </h3>
-              <div className="border p-4 rounded-lg bg-gray-50 font-mono text-sm leading-tight text-center">
-                <div className="font-bold mb-2">HIM Finance System</div>
-                <div>================================</div>
-                <div>
-                  Receipt #:{" "}
-                  {"RC" + Math.floor(100000 + Math.random() * 900000)}
+              <p className="text-gray-600 text-sm mt-1">
+                Live preview of the receipt to be printed
+              </p>
+            </div>
+
+            <div className="p-6">
+              <div className="border-2 border-gray-300 p-6 rounded-xl bg-white font-mono text-sm leading-tight text-center">
+                <div className="font-bold text-lg mb-3">HIM Finance System</div>
+                <div className="border-b border-dashed border-gray-400 mb-3"></div>
+                <div className="space-y-2 text-left">
+                  <div><span className="font-semibold">Receipt #:</span> {"RC" + Math.floor(100000 + Math.random() * 900000)}</div>
+                  <div><span className="font-semibold">Payer:</span> {receipt.payerName || "---"}</div>
+                  <div><span className="font-semibold">Type:</span> {receipt.paymentType === 'project' ? 'Project Contribution' : 'Revenue Payment'}</div>
+                  <div><span className="font-semibold">Description:</span> {
+                    receipt.paymentType === 'project' 
+                      ? projects.find(p => p.revenueHeadCode === receipt.revenueHeadCode)?.title || "---"
+                      : revenueHeads.find(r => r.code === receipt.revenueHeadCode)?.name || "---"
+                  }</div>
+                  <div><span className="font-semibold">Amount:</span> {receipt.currency} {(parseFloat(receipt.amount) || 0).toFixed(2)}</div>
+                  <div><span className="font-semibold">Payment:</span> {receipt.paymentMethod}</div>
+                  <div><span className="font-semibold">Branch:</span> {branches.find(b => b.branchCode === receipt.branchCode)?.branchName || "---"}</div>
+                  <div><span className="font-semibold">Operator:</span> {currentUser?.username || "---"}</div>
+                  <div><span className="font-semibold">Date:</span> {new Date().toLocaleString()}</div>
                 </div>
-                <div>Payer: {receipt.payerName || "---"}</div>
-                <div>
-                  Revenue:{" "}
-                  {revenueHeads.find((r) => r.code === receipt.revenueHeadCode)
-                    ?.name || "---"}
+                <div className="border-t border-dashed border-gray-400 mt-4 pt-3">
+                  <div className="italic text-gray-600">Thank you for your support!</div>
+                  <div className="text-gray-600">May God bless you abundantly.</div>
                 </div>
-                <div>
-                  Amount: {receipt.currency}{" "}
-                  {(parseFloat(receipt.amount) || 0).toFixed(2)}
-                </div>
-                <div>Payment: {receipt.paymentMethod}</div>
-                <div>
-                  Branch:{" "}
-                  {branches.find((b) => b.code === receipt.branchCode)?.name ||
-                    "---"}
-                </div>
-                <div>Operator: {loggedInUser || "---"}</div>
-                <div>Date: {new Date().toLocaleString()}</div>
-                <div className="mt-2 italic">Thank you for your support!</div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast.visible && (
+        <div className={`fixed bottom-6 right-6 z-50 px-6 py-4 rounded-2xl shadow-lg text-white font-medium flex items-center gap-3 transition-all duration-300 ${
+          toast.type === "error" ? "bg-red-500" : 
+          toast.type === "info" ? "bg-blue-500" : "bg-green-500"
+        }`}>
+          {toast.type === "success" && <CheckCircle className="w-5 h-5" />}
+          {toast.type === "error" && <AlertCircle className="w-5 h-5" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Modal */}
+      {isModalOpen && (
+        <Modal
+          isOpen={isModalOpen}
+          title={modalContent.title}
+          message={modalContent.message}
+          type={modalContent.type}
+          onClose={() => setIsModalOpen(false)}
+        />
+      )}
+
+      {/* Printing Overlay */}
+      {isPrinting && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-2xl px-8 py-6 shadow-xl flex items-center gap-4">
+            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+            <div className="text-gray-800 font-medium">Processing transaction and printing receipt...</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-type ModalProps = {
-  isOpen: boolean;
-  title: string;
-  message: string;
-  type: "info" | "error" | "success";
-  onClose: () => void;
-};
-
-const Modal = ({ isOpen, title, message, type, onClose }: ModalProps) => {
+// Modal Component
+const Modal = ({ isOpen, title, message, type, onClose }: { isOpen: boolean; title: string; message: string; type: "info" | "error" | "success"; onClose: () => void }) => {
   if (!isOpen) return null;
+
+  const icon = type === "success" ? <CheckCircle className="w-6 h-6 text-green-600" /> :
+               type === "error" ? <AlertCircle className="w-6 h-6 text-red-600" /> :
+               <AlertCircle className="w-6 h-6 text-blue-600" />;
+
+  const buttonColor = type === "success" ? "bg-green-600 hover:bg-green-700" :
+                     type === "error" ? "bg-red-600 hover:bg-red-700" :
+                     "bg-blue-600 hover:bg-blue-700";
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
-        <h2
-          className={`text-lg font-bold mb-4 ${
-            type === "error"
-              ? "text-red-600"
-              : type === "success"
-              ? "text-green-600"
-              : "text-blue-600"
-          }`}
-        >
-          {title}
-        </h2>
-        <p className="mb-6">{message}</p>
-        <button
-          onClick={onClose}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Close
-        </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          {icon}
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        </div>
+        <p className="text-gray-600 mb-6">{message}</p>
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            className={`px-6 py-2.5 text-white rounded-xl transition-all duration-200 font-medium ${buttonColor}`}
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
