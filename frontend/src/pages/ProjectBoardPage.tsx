@@ -26,7 +26,10 @@ import {
   updateProject,
   deleteProject,
   getBranches,
-  getCurrencies,
+  getProjectContributions,
+  getMemberContributionProject,
+  getTopContributors,
+  getProjectContributionStats
 } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import useAuth from "../hooks/useAuth";
@@ -39,201 +42,17 @@ import ProjectFormModal from "@/components/ProjectFormModal";
 const calculateProgress = (current, goal) => {
   if (!goal || goal === 0) return 0;
   const progress = (current / goal) * 100;
-  return Math.min(Math.round(progress * 100) / 100, 100); // Round to 2 decimal places, max 100%
+  return Math.min(Math.round(progress * 100) / 100, 100);
 };
 
-// Mock data for project details (remove when real API is ready)
-const mockProjectMembers = [
-  { id: 1, firstName: "John", lastName: "Doe" },
-  { id: 2, firstName: "Jane", lastName: "Smith" },
-  { id: 3, firstName: "Mike", lastName: "Johnson" }
+// Hardcoded currencies since API is not ready yet
+const hardcodedCurrencies = [
+  { code: "USD", name: "US Dollar", symbol: "$", decimalPlaces: 2 },
+  { code: "EUR", name: "Euro", symbol: "€", decimalPlaces: 2 }
 ];
-
-const mockProjectContributions = [
-  { id: 1, amount: 5000, currencyCode: "USD", memberId: "MEM001", date: "2024-01-15" },
-  { id: 2, amount: 3000, currencyCode: "USD", memberId: "MEM002", date: "2024-01-10" },
-  { id: 3, amount: 2000, currencyCode: "USD", memberId: "MEM003", date: "2024-01-05" }
-];
-
-// Project Details Modal Component
-const ProjectDetailsModal = ({ project, isOpen, onClose }) => {
-  if (!isOpen || !project) return null;
-
-  const progress = calculateProgress(project.currentFunding, project.fundingGoal);
-  const members = mockProjectMembers;
-  const contributions = mockProjectContributions;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop with blur */}
-      <div 
-        className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-300"
-        onClick={onClose}
-      />
-      
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden transform transition-all duration-300 scale-100">
-        {/* Header */}
-        <div className="flex justify-between items-start p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <FileText className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{project.title}</h2>
-                <div className="flex items-center gap-4 mt-2">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Building className="w-4 h-4" />
-                    <span>{project.branchName}</span>
-                  </div>
-                  <StatusBadge status={project.status} />
-                </div>
-              </div>
-            </div>
-          </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 ml-4"
-          >
-            <X className="w-6 h-6 text-gray-500 hover:text-gray-700" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            {/* Project Overview */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Description */}
-              <div className="bg-gray-50 rounded-xl p-5">
-                <h3 className="font-semibold text-gray-800 mb-3">Project Description</h3>
-                <p className="text-gray-600 leading-relaxed">
-                  {project.description || "No description provided."}
-                </p>
-              </div>
-
-              {/* Funding Progress */}
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
-                <h3 className="font-semibold text-gray-800 mb-4">Funding Progress</h3>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm text-gray-600 mb-2">
-                      <span>Progress</span>
-                      <span className="font-semibold">{progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div 
-                        className={`h-3 rounded-full transition-all duration-500 ${
-                          progress >= 100 ? 'bg-green-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
-                        }`}
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="font-semibold text-blue-700">
-                        {formatCurrency(project.currentFunding, 'USD')}
-                      </div>
-                      <div className="text-blue-600 text-xs">Raised</div>
-                    </div>
-                    <div className="text-center p-3 bg-gray-50 rounded-lg">
-                      <div className="font-semibold text-gray-700">
-                        {formatCurrency(project.fundingGoal, 'USD')}
-                      </div>
-                      <div className="text-gray-600 text-xs">Goal</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Project Metadata */}
-            <div className="space-y-6">
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
-                <h3 className="font-semibold text-gray-800 mb-4">Project Details</h3>
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-sm text-gray-500">Created</span>
-                    <p className="font-medium text-sm">
-                      {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Not specified'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-500">Last Updated</span>
-                    <p className="font-medium text-sm">
-                      {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Not specified'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-500">Contributions</span>
-                    <p className="font-medium text-sm">{project.transactionCount || 0}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Team Members */}
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
-                <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Team Members
-                </h3>
-                <div className="space-y-2">
-                  {members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 text-sm font-semibold">
-                          {member.firstName[0]}{member.lastName[0]}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {member.firstName} {member.lastName}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Contributions */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Recent Contributions
-            </h3>
-            <div className="space-y-3">
-              {contributions.map((contribution) => (
-                <div key={contribution.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                      <DollarSign className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">Member {contribution.memberId}</p>
-                      <p className="text-sm text-gray-500">{contribution.date}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600 text-lg">
-                      {formatCurrency(contribution.amount, contribution.currencyCode)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Project Card Component for Grid View
-const ProjectCard = ({ project, onEdit, onDelete, onViewDetails }) => {
+const ProjectCard = ({ project, onEdit, onDelete, onViewDetails, isExpanded, onToggleExpand }) => {
   const progress = calculateProgress(project.currentFunding, project.fundingGoal);
   
   return (
@@ -273,8 +92,8 @@ const ProjectCard = ({ project, onEdit, onDelete, onViewDetails }) => {
             ></div>
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>{formatCurrency(project.currentFunding, 'USD')}</span>
-            <span>{formatCurrency(project.fundingGoal, 'USD')}</span>
+            <span>{formatCurrency(project.currentFunding, project.currencyCode || 'USD')}</span>
+            <span>{formatCurrency(project.fundingGoal, project.currencyCode || 'USD')}</span>
           </div>
         </div>
 
@@ -294,13 +113,21 @@ const ProjectCard = ({ project, onEdit, onDelete, onViewDetails }) => {
 
         {/* Actions */}
         <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-          <button
-            onClick={() => onViewDetails(project)}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 transition-colors"
-          >
-            View Details
-            <ChevronDown className="w-4 h-4" />
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onViewDetails(project)}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            >
+              View Details
+            </button>
+            <button
+              onClick={onToggleExpand}
+              className="text-sm text-gray-600 hover:text-gray-700 font-medium flex items-center gap-1 transition-colors"
+            >
+              {isExpanded ? 'Show Less' : 'Quick View'}
+              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onEdit(project)}
@@ -319,12 +146,19 @@ const ProjectCard = ({ project, onEdit, onDelete, onViewDetails }) => {
           </div>
         </div>
       </div>
+
+      {/* Expanded Details */}
+      {isExpanded && (
+        <div className="border-t border-gray-100 bg-gray-50/50 p-6 animate-in fade-in duration-300">
+          <ExpandedProjectView project={project} />
+        </div>
+      )}
     </div>
   );
 };
 
 // Project List View Component
-const ProjectListView = ({ projects, onEdit, onDelete, onViewDetails, sortConfig, onSort }) => {
+const ProjectListView = ({ projects, onEdit, onDelete, onViewDetails, sortConfig, onSort, expandedProject, onToggleExpand }) => {
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200">
       <table className="w-full">
@@ -362,74 +196,86 @@ const ProjectListView = ({ projects, onEdit, onDelete, onViewDetails, sortConfig
           {projects.map((project) => {
             const progress = calculateProgress(project.currentFunding, project.fundingGoal);
             return (
-              <tr key={project.id} className="hover:bg-gray-50 transition-colors group">
-                <td className="py-4 px-6">
-                  <div>
-                    <div className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
-                      {project.title}
+              <React.Fragment key={project.id}>
+                <tr className="hover:bg-gray-50 transition-colors group">
+                  <td className="py-4 px-6">
+                    <div>
+                      <div className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors cursor-pointer"
+                           onClick={() => onViewDetails(project)}>
+                        {project.title}
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1 line-clamp-2 max-w-md">
+                        {project.description || "No description provided."}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500 mt-1 line-clamp-2 max-w-md">
-                      {project.description || "No description provided."}
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Building className="w-4 h-4" />
+                      {project.branchName}
                     </div>
-                  </div>
-                </td>
-                <td className="py-4 px-6">
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <Building className="w-4 h-4" />
-                    {project.branchName}
-                  </div>
-                </td>
-                <td className="py-4 px-6">
-                  <div className="text-sm font-semibold text-gray-900">
-                    {formatCurrency(project.fundingGoal, 'USD')}
-                  </div>
-                </td>
-                <td className="py-4 px-6">
-                  <div className="text-sm font-semibold text-green-600">
-                    {formatCurrency(project.currentFunding, 'USD')}
-                  </div>
-                </td>
-                <td className="py-4 px-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-20 bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          progress >= 100 ? 'bg-green-500' : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${progress}%` }}
-                      ></div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {formatCurrency(project.fundingGoal, project.currencyCode || 'USD')}
                     </div>
-                    <span className="text-sm font-medium text-gray-700 min-w-[40px]">
-                      {progress}%
-                    </span>
-                  </div>
-                </td>
-                <td className="py-4 px-6">
-                  <StatusBadge status={project.status} />
-                </td>
-                <td className="py-4 px-6">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onViewDetails(project)}
-                      className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <FileText className="w-3 h-3" /> Details
-                    </button>
-                    <button
-                      onClick={() => onEdit(project)}
-                      className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <Edit className="w-3 h-3" /> Edit
-                    </button>
-                    <button
-                      onClick={() => onDelete(project.id)}
-                      className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" /> Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="text-sm font-semibold text-green-600">
+                      {formatCurrency(project.currentFunding, project.currencyCode || 'USD')}
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${
+                            progress >= 100 ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 min-w-[40px]">
+                        {progress}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <StatusBadge status={project.status} />
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onViewDetails(project)}
+                        className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        <FileText className="w-3 h-3" /> Details
+                      </button>
+                      <button
+                        onClick={() => onEdit(project)}
+                        className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <Edit className="w-3 h-3" /> Edit
+                      </button>
+                      <button
+                        onClick={() => onDelete(project.id)}
+                        className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {expandedProject === project.id && (
+                  <tr>
+                    <td colSpan="7" className="p-0">
+                      <div className="bg-gray-50/50 px-6 py-4 border-t border-gray-100">
+                        <ExpandedProjectView project={project} />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}
         </tbody>
@@ -438,6 +284,400 @@ const ProjectListView = ({ projects, onEdit, onDelete, onViewDetails, sortConfig
   );
 };
 
+// Expanded Project View Component
+const ExpandedProjectView = ({ project }) => {
+  return (
+    <div className="space-y-6">
+      <h4 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+        Quick Overview
+      </h4>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <h5 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Project Information
+          </h5>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Created:</span>
+              <span className="font-medium">
+                {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Not specified'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Last Updated:</span>
+              <span className="font-medium">
+                {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Not specified'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total Contributions:</span>
+              <span className="font-medium">{project.transactionCount || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Currency:</span>
+              <span className="font-medium">{project.currencyCode || 'USD'}</span>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <h5 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Target className="w-4 h-4" />
+            Funding Status
+          </h5>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Raised:</span>
+              <span className="font-semibold text-green-600">
+                {formatCurrency(project.currentFunding, project.currencyCode || 'USD')}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Goal:</span>
+              <span className="font-semibold">
+                {formatCurrency(project.fundingGoal, project.currencyCode || 'USD')}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Remaining:</span>
+              <span className="font-semibold text-orange-600">
+                {formatCurrency(project.fundingGoal - project.currentFunding, project.currencyCode || 'USD')}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Project Details Modal Component
+const ProjectDetailsModal = ({ project, isOpen, onClose, showModal }) => {
+  const [contributions, setContributions] = useState([]);
+  const [topContributors, setTopContributors] = useState([]);
+  const [contributionStats, setContributionStats] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && project?.id) {
+      loadContributionData();
+    }
+  }, [isOpen, project?.id]);
+
+  const loadContributionData = async () => {
+    setIsLoading(true);
+    try {
+      // Use the new API function to get member contributions
+      const contributionsData = await getMemberContributionProject(project.id);
+      setContributions(contributionsData);
+
+      console.log("here is the contributions data:", contributionsData)
+      
+      // Calculate top contributors from the contributions data
+      const contributorMap = new Map();
+      
+      contributionsData.forEach(contribution => {
+        const memberId = contribution.memberId;
+        if (contributorMap.has(memberId)) {
+          contributorMap.set(memberId, {
+            ...contributorMap.get(memberId),
+            totalAmount: contributorMap.get(memberId).totalAmount + contribution.amount
+          });
+        } else {
+          contributorMap.set(memberId, {
+            memberId: contribution.memberId,
+            memberFirstName: contribution.memberFirstName,
+            memberLastName: contribution.memberLastName,
+            totalAmount: contribution.amount
+          });
+        }
+      });
+      
+      // Convert to array and sort by total amount (descending)
+      const topContributorsData = Array.from(contributorMap.values())
+        .sort((a, b) => b.totalAmount - a.totalAmount)
+        .slice(0, 5); // Top 5 contributors
+      
+      setTopContributors(topContributorsData);
+      
+      // Calculate contribution stats
+      const stats = {
+        uniqueContributors: contributorMap.size,
+        totalContributions: contributionsData.length,
+        averageContribution: contributionsData.length > 0 
+          ? contributionsData.reduce((sum, c) => sum + c.amount, 0) / contributionsData.length 
+          : 0
+      };
+      setContributionStats(stats);
+      
+    } catch (error) {
+      console.error('Failed to load contribution data:', error);
+      showModal?.(error.message || 'Failed to load contribution data', 'Error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen || !project) return null;
+
+  const progress = calculateProgress(project.currentFunding, project.fundingGoal);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div 
+        className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-300"
+        onClick={onClose}
+      />
+      
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden transform transition-all duration-300 scale-100">
+        <div className="flex justify-between items-start p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <FileText className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{project.title}</h2>
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Building className="w-4 h-4" />
+                    <span>{project.branchName}</span>
+                  </div>
+                  <StatusBadge status={project.status} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 ml-4"
+          >
+            <X className="w-6 h-6 text-gray-500 hover:text-gray-700" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-gray-50 rounded-xl p-5">
+                    <h3 className="font-semibold text-gray-800 mb-3">Project Description</h3>
+                    <p className="text-gray-600 leading-relaxed">
+                      {project.description || "No description provided."}
+                    </p>
+                  </div>
+
+                  <div className="bg-white border border-gray-200 rounded-xl p-5">
+                    <h3 className="font-semibold text-gray-800 mb-4">Funding Progress</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between text-sm text-gray-600 mb-2">
+                          <span>Progress</span>
+                          <span className="font-semibold">{progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-3">
+                          <div 
+                            className={`h-3 rounded-full transition-all duration-500 ${
+                              progress >= 100 ? 'bg-green-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                            }`}
+                            style={{ width: `${progress}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="text-center p-3 bg-blue-50 rounded-lg">
+                          <div className="font-semibold text-blue-700">
+                            {formatCurrency(project.currentFunding, project.currencyCode || 'USD')}
+                          </div>
+                          <div className="text-blue-600 text-xs">Raised</div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="font-semibold text-gray-700">
+                            {formatCurrency(project.fundingGoal, project.currencyCode || 'USD')}
+                          </div>
+                          <div className="text-gray-600 text-xs">Goal</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="bg-white border border-gray-200 rounded-xl p-5">
+                    <h3 className="font-semibold text-gray-800 mb-4">Project Details</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm text-gray-500">Created</span>
+                        <p className="font-medium text-sm">
+                          {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Not specified'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Last Updated</span>
+                        <p className="font-medium text-sm">
+                          {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Not specified'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Total Contributions</span>
+                        <p className="font-medium text-sm">{contributionStats?.totalContributions || 0}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Unique Contributors</span>
+                        <p className="font-medium text-sm">{contributionStats?.uniqueContributors || 0}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Currency</span>
+                        <p className="font-medium text-sm">{project.currencyCode || 'USD'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Top Contributors Section */}
+                  {topContributors.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-xl p-5">
+                      <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Top Contributors
+                      </h3>
+                      <div className="space-y-3">
+                        {topContributors.map((contributor, index) => (
+                          <div key={contributor.memberId} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-blue-600 text-sm font-semibold">
+                                  {contributor.memberFirstName?.[0]}{contributor.memberLastName?.[0]}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {contributor.memberFirstName} {contributor.memberLastName}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {index === 0 ? '🥇 Top Contributor' : `#${index + 1}`}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-green-600">
+                                {formatCurrency(contributor.totalAmount, project.currencyCode || 'USD')}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Contributions Section */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Recent Contributions ({contributions.length})
+                </h3>
+                <div className="space-y-3">
+                  {contributions.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-4 gap-4 px-4 py-2 text-sm font-semibold text-gray-700 border-b border-gray-200">
+                        <span>Member</span>
+                        <span>Amount</span>
+                        <span>Date</span>
+                        <span>Payment Method</span>
+                      </div>
+                      {contributions.slice(0, 10).map((contribution) => (
+                        <div key={contribution.id} className="grid grid-cols-4 gap-4 items-center p-3 hover:bg-gray-50 rounded-lg border border-gray-100">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {contribution.memberFirstName} {contribution.memberLastName}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              ID: {contribution.memberId}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-green-600 text-lg">
+                              {formatCurrency(contribution.amount, project.currencyCode || 'USD')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-700">
+                              {new Date(contribution.contributionDate).toLocaleDateString()}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(contribution.contributionDate).toLocaleTimeString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-700">
+                              {contribution.paymentMethod || 'N/A'}
+                            </p>
+                            {contribution.transactionRrn && (
+                              <p className="text-xs text-gray-400 truncate">
+                                Ref: {contribution.transactionRrn}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {contributions.length > 10 && (
+                        <div className="text-center pt-4">
+                          <p className="text-sm text-gray-500">
+                            Showing 10 of {contributions.length} contributions
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Target className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">No contributions yet</p>
+                      <p className="text-gray-400 text-sm mt-1">Be the first to contribute to this project!</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Contribution Statistics */}
+              {contributionStats && contributions.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6">
+                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Contribution Statistics
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-700">{contributionStats.uniqueContributors}</div>
+                      <div className="text-blue-600 text-sm">Unique Contributors</div>
+                    </div>
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-700">{contributionStats.totalContributions}</div>
+                      <div className="text-green-600 text-sm">Total Contributions</div>
+                    </div>
+                    <div className="text-center p-4 bg-purple-50 rounded-lg">
+                      <div className="text-2xl font-bold text-purple-700">
+                        {formatCurrency(contributionStats.averageContribution, project.currencyCode || 'USD')}
+                      </div>
+                      <div className="text-purple-600 text-sm">Average Contribution</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Main Component
 const ProjectBoardPage = ({ showModal }) => {
   const queryClient = useQueryClient();
   const { currentUser } = useAuth();
@@ -448,6 +688,7 @@ const ProjectBoardPage = ({ showModal }) => {
     key: "createdAt",
     direction: "desc",
   });
+  const [expandedProject, setExpandedProject] = useState(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -457,7 +698,10 @@ const ProjectBoardPage = ({ showModal }) => {
   const [viewMode, setViewMode] = useState("grid");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Disable background scroll when modal open
+  // Use hardcoded currencies instead of API call
+  const currencies = hardcodedCurrencies;
+
+  // Modal effects
   useEffect(() => {
     if (isProjectModalOpen || isDetailsModalOpen) {
       document.body.style.overflow = "hidden";
@@ -469,7 +713,6 @@ const ProjectBoardPage = ({ showModal }) => {
     };
   }, [isProjectModalOpen, isDetailsModalOpen]);
 
-  // Close modal on escape key
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape") {
@@ -497,9 +740,6 @@ const ProjectBoardPage = ({ showModal }) => {
   } = useQuery({
     queryKey: ["projects"],
     queryFn: getProjects,
-    onSuccess: (data) => {
-      console.log("Projects data received:", data);
-    },
     onError: (err) => {
       console.error("Projects error:", err);
       showModal?.(err.message || "Failed to load projects.", "Error");
@@ -509,11 +749,6 @@ const ProjectBoardPage = ({ showModal }) => {
   const { data: branches = [] } = useQuery({
     queryKey: ["branches"],
     queryFn: getBranches,
-  });
-
-  const { data: currencies = [] } = useQuery({
-    queryKey: ["currencies"],
-    queryFn: getCurrencies,
   });
 
   // Statistics
@@ -572,7 +807,55 @@ const ProjectBoardPage = ({ showModal }) => {
     },
   });
 
-  // Sorting + Filtering
+  // Handlers
+  const handleViewDetails = (project) => {
+    setSelectedProject(project);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleCloseDetailsModal = () => {
+    setIsDetailsModalOpen(false);
+    setSelectedProject(null);
+  };
+
+  const handleEditProject = (project) => {
+    setCurrentProject(project);
+    setIsProjectModalOpen(true);
+  };
+
+  const handleCreateProject = () => {
+    setCurrentProject(null);
+    setIsProjectModalOpen(true);
+  };
+
+  const handleDeleteProject = (id) => {
+    showModal?.(
+      "Are you sure you want to delete this project? This action cannot be undone.",
+      "Confirm Deletion",
+      true,
+      () => deleteProjectMutation.mutate(id)
+    );
+  };
+
+  const handleCloseModal = () => {
+    setIsProjectModalOpen(false);
+    setCurrentProject(null);
+  };
+
+  const requestSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setBranchFilter("all");
+  };
+
+  // Filtering and Sorting
   const filteredAndSortedProjects = useMemo(() => {
     let filtered = [...(projects || [])];
 
@@ -591,9 +874,7 @@ const ProjectBoardPage = ({ showModal }) => {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
         
-        // Handle nested properties and special cases
         if (sortConfig.key === 'branch') {
-          // Use the branchName that already exists in the project data
           aVal = a.branchName;
           bVal = b.branchName;
         } else if (sortConfig.key === 'progress') {
@@ -611,54 +892,6 @@ const ProjectBoardPage = ({ showModal }) => {
     return filtered;
   }, [projects, sortConfig, searchTerm, statusFilter, branchFilter]);
 
-  // Handlers
-  const handleEditProject = (project) => {
-    setCurrentProject(project);
-    setIsProjectModalOpen(true);
-  };
-
-  const handleCreateProject = () => {
-    setCurrentProject(null);
-    setIsProjectModalOpen(true);
-  };
-
-  const handleViewDetails = (project) => {
-    setSelectedProject(project);
-    setIsDetailsModalOpen(true);
-  };
-
-  const handleDeleteProject = (id) => {
-    showModal(
-      "Are you sure you want to delete this project? This action cannot be undone.",
-      "Confirm Deletion",
-      true,
-      () => deleteProjectMutation.mutate(id)
-    );
-  };
-
-  const handleCloseModal = () => {
-    setIsProjectModalOpen(false);
-    setCurrentProject(null);
-  };
-
-  const handleCloseDetailsModal = () => {
-    setIsDetailsModalOpen(false);
-    setSelectedProject(null);
-  };
-
-  const requestSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
-  };
-
-  const clearFilters = () => {
-    setSearchTerm("");
-    setStatusFilter("all");
-    setBranchFilter("all");
-  };
-
   if (isLoadingProjects) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
@@ -669,8 +902,8 @@ const ProjectBoardPage = ({ showModal }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      {/* Header */}
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
           <div>
             <div className="flex items-center gap-3 mb-3">
@@ -843,7 +1076,6 @@ const ProjectBoardPage = ({ showModal }) => {
 
         {/* Projects Grid/List */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-          {/* View Controls */}
           <div className="p-6 border-b border-gray-200 bg-gray-50/80">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
@@ -885,7 +1117,6 @@ const ProjectBoardPage = ({ showModal }) => {
             </div>
           </div>
 
-          {/* Projects Content */}
           <div className="p-6">
             {filteredAndSortedProjects.length > 0 ? (
               viewMode === 'grid' ? (
@@ -897,6 +1128,10 @@ const ProjectBoardPage = ({ showModal }) => {
                       onEdit={handleEditProject}
                       onDelete={handleDeleteProject}
                       onViewDetails={handleViewDetails}
+                      isExpanded={expandedProject === project.id}
+                      onToggleExpand={() => setExpandedProject(
+                        expandedProject === project.id ? null : project.id
+                      )}
                     />
                   ))}
                 </div>
@@ -908,6 +1143,8 @@ const ProjectBoardPage = ({ showModal }) => {
                   onViewDetails={handleViewDetails}
                   sortConfig={sortConfig}
                   onSort={requestSort}
+                  expandedProject={expandedProject}
+                  onToggleExpand={setExpandedProject}
                 />
               )
             ) : (
@@ -928,14 +1165,16 @@ const ProjectBoardPage = ({ showModal }) => {
         </div>
       </div>
 
-      {/* Project Details Modal */}
-      <ProjectDetailsModal
-        project={selectedProject}
-        isOpen={isDetailsModalOpen}
-        onClose={handleCloseDetailsModal}
-      />
+      {/* Modals - Only render when open */}
+      {isDetailsModalOpen && (
+        <ProjectDetailsModal
+          project={selectedProject}
+          isOpen={isDetailsModalOpen}
+          onClose={handleCloseDetailsModal}
+          showModal={showModal}
+        />
+      )}
 
-      {/* Project Form Modal */}
       {isProjectModalOpen && (
         <ProjectFormModal
           isOpen={isProjectModalOpen}
