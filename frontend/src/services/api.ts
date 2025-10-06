@@ -215,68 +215,28 @@ export const deleteExpenditureHead = (code: any) =>
 
 
 // Update createContribution to handle the new DTO response
-export const createContribution = async (contributionData) => {
-  const response = await fetch('/api/contributions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(contributionData),
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Failed to create contribution');
-  }
-  
-  return response.json(); // Now returns MemberProjectContributionDTO
-};
+// Contributions API
 
-// Add new API calls for the additional endpoints
-export const getProjectTotalContributions = async (projectId) => {
-  const response = await fetch(`/api/contributions/project/${projectId}/total`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch total contributions');
-  }
-  return response.json();
-};
+export const createContribution = (contributionData: any) =>
+  apiClient("/contributions", "POST", contributionData);
 
-export const getMemberContributionToProject = async (memberId, projectId) => {
-  const response = await fetch(`/api/contributions/member/${memberId}/project/${projectId}/total`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch member contribution');
-  }
-  return response.json();
-};
+export const getProjectTotalContributions = (projectId: any) =>
+  apiClient(`/contributions/project/${projectId}/total`);
 
-// Update your getMemberContributionProject function in api.ts to use apiClient
-export const getMemberContributionProject = async (projectId) => {
-  return apiClient(`/contributions/project/${projectId}`, "GET");
-};
+export const getMemberContributionToProject = (memberId: any, projectId: any) =>
+  apiClient(`/contributions/member/${memberId}/project/${projectId}/total`);
 
-export const getTopContributors = async (projectId) => {
-  const response = await fetch(`/api/contributions/project/${projectId}/top-contributors`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch top contributors');
-  }
-  return response.json();
-};
+export const getMemberContributionProject = (projectId: any) =>
+  apiClient(`/contributions/project/${projectId}`);
 
-export const hasMemberContributed = async (memberId, projectId) => {
-  const response = await fetch(`/api/contributions/member/${memberId}/project/${projectId}/has-contributed`);
-  if (!response.ok) {
-    throw new Error('Failed to check contribution status');
-  }
-  return response.json();
-};
+export const getTopContributors = (projectId: any) =>
+  apiClient(`/contributions/project/${projectId}/top-contributors`);
 
-export const getProjectContributionStats = async (projectId) => {
-  const response = await fetch(`/api/contributions/project/${projectId}/stats`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch contribution stats');
-  }
-  return response.json();
-};
+export const hasMemberContributed = (memberId: any, projectId: any) =>
+  apiClient(`/contributions/member/${memberId}/project/${projectId}/has-contributed`);
+
+export const getProjectContributionStats = (projectId: any) =>
+  apiClient(`/contributions/project/${projectId}/stats`);
 
 
 

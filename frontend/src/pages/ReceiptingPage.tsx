@@ -3,7 +3,6 @@ import {
   getRevenueHeads, 
   getBranches, 
   getMembers, 
-  generateReceipt, 
   getPaymentMethods, 
   getProjects, 
   createContribution,
@@ -83,14 +82,42 @@ const ReceiptingPage = () => {
     );
   }, [receipt]);
 
-  // Payment method mapping
+  // Payment method mapping - ROBUST VERSION
   const paymentMethodMap = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const m of paymentMethods) {
-      const name = (m.name || m.method || "").toString();
-      const id = Number(m.id ?? m.paymentMethodId);
-      if (name && Number.isFinite(id)) map[name] = id;
+    console.log('Payment methods raw data:', paymentMethods);
+    
+    // If paymentMethods is empty or not working, create default mappings
+    if (!paymentMethods || paymentMethods.length === 0) {
+      console.log('No payment methods from API, using defaults');
+      // Create default payment method mappings
+      const defaultMethods = [
+        { name: 'Cash', id: 1 },
+        { name: 'Card', id: 2 },
+        { name: 'Bank Transfer', id: 3 },
+        { name: 'Mobile Money', id: 4 },
+        { name: 'Check', id: 5 }
+      ];
+      
+      defaultMethods.forEach(method => {
+        map[method.name] = method.id;
+      });
+    } else {
+      // Process actual payment methods from API
+      for (const m of paymentMethods) {
+        // Try different possible field names
+        const name = (m.name || m.method || m.paymentMethodName || m.paymentMethod || "").toString().trim();
+        const id = Number(m.id ?? m.paymentMethodId ?? m.paymentMethodID ?? m.methodId);
+        
+        console.log('Processing payment method:', { name, id, raw: m });
+        
+        if (name && Number.isFinite(id) && id > 0) {
+          map[name] = id;
+        }
+      }
     }
+    
+    console.log('Final payment method map:', map);
     return map;
   }, [paymentMethods]);
 
@@ -107,29 +134,46 @@ const ReceiptingPage = () => {
           getProjects(),
         ]);
 
-        console.log('Raw branches data:', branchesData); // Debug log
+        console.log('Raw revenue data:', revenueData);
+        console.log('Raw branches data:', branchesData);
+        console.log('Raw projects data:', projectsData);
 
+        // Process revenue heads data
         setRevenueHeads(revenueData || []);
-        
-        // Process branches data properly
+
+        // Process branches data
         const processedBranches = Array.isArray(branchesData) ? branchesData : [];
         setBranches(processedBranches);
         
+        // Process members data
         const membersArray = Array.isArray(membersData) ? membersData : (membersData && (membersData as any).members) || [];
         setMembers(membersArray);
-        setPaymentMethods(Array.isArray(paymentMethodsData) ? paymentMethodsData : []);
         
-        // Transform projects data
+        // Process payment methods
+        const paymentMethodsArray = Array.isArray(paymentMethodsData) ? paymentMethodsData : [];
+        setPaymentMethods(paymentMethodsArray);
+        
+        // Transform projects data to ensure consistent structure
         const transformedProjects = Array.isArray(projectsData) ? projectsData.map(project => ({
-          id: project.id,
+          id: String(project.id), 
           title: project.title || project.name,
           revenueHeadCode: project.revenueHeadCode,
-          currentFunding: project.currentFunding || 0,
-          fundingGoal: project.fundingGoal || 0,
-          status: project.status,
-          branchId: project.branchId
+          branchId: project.branchId 
         })) : [];
         setProjects(transformedProjects);
+
+        // Set a safe default payment method after data is fetched
+        let defaultMethod = paymentMethodsArray[0]; 
+
+        if (defaultMethod) {
+            const validMethodName = defaultMethod.name || defaultMethod.method;
+            setReceipt(prev => ({
+                ...prev,
+                paymentMethod: validMethodName,
+            }));
+        } else {
+            console.warn("No payment methods found from the API. Payment method dropdown may be empty.");
+        }
         
       } catch (err: any) {
         console.error("Failed to fetch data:", err);
@@ -157,18 +201,69 @@ const ReceiptingPage = () => {
     }
   }, [searchTerm, members]);
 
-  // Get available options based on payment type and branch
+  // Get available options based on payment type and branch - UPDATED VERSION
   const availableOptions = useMemo(() => {
-    if (receipt.paymentType === 'project') {
-      return projects.filter(project => 
-        !receipt.branchCode || project.branchId?.toString() === receipt.branchCode
-      );
-    } else {
-      return revenueHeads.filter(head => 
-        !receipt.branchCode || head.branchCode === receipt.branchCode
-      );
+    console.log('Available Options Debug:', {
+      branchCode: receipt.branchCode,
+      paymentType: receipt.paymentType,
+      projectsCount: projects.length,
+      revenueHeadsCount: revenueHeads.length
+    });
+
+    if (!receipt.branchCode) {
+      return [];
     }
-  }, [receipt.paymentType, receipt.branchCode, projects, revenueHeads]);
+
+    // Find the branch object to get its ID
+    const selectedBranch = branches.find(b => b.branchCode === receipt.branchCode);
+    const branchId = selectedBranch?.id;
+
+    console.log('Branch matching:', {
+      branchCode: receipt.branchCode,
+      selectedBranch: selectedBranch,
+      branchId: branchId
+    });
+
+    if (receipt.paymentType === 'project') {
+      // Filter projects by branchId
+      const filteredProjects = projects.filter(project => {
+        const projectBranchIdStr = project.branchId?.toString();
+        const selectedBranchIdStr = branchId?.toString();
+        const matches = projectBranchIdStr === selectedBranchIdStr;
+        
+        console.log('Project filter:', {
+          project: project.title,
+          projectBranchId: project.branchId,
+          selectedBranchId: branchId,
+          matches: matches
+        });
+        
+        return matches;
+      });
+      
+      console.log('Filtered projects:', filteredProjects);
+      return filteredProjects;
+    } else {
+      // For revenue heads, filter by branchId using the new backend data
+      const filteredRevenueHeads = revenueHeads.filter(head => {
+        // Check if revenue head has branchId or branchCode that matches
+        const headBranchId = head.branchId || head.branchID;
+        const matches = !headBranchId || headBranchId?.toString() === branchId?.toString();
+        
+        console.log('Revenue head filter:', {
+          head: head.name,
+          headBranchId: headBranchId,
+          selectedBranchId: branchId,
+          matches: matches
+        });
+        
+        return matches;
+      });
+      
+      console.log('Filtered revenue heads:', filteredRevenueHeads);
+      return filteredRevenueHeads;
+    }
+  }, [receipt.paymentType, receipt.branchCode, projects, revenueHeads, branches]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -176,7 +271,25 @@ const ReceiptingPage = () => {
   };
 
   const selectMember = (member: Member) => {
-    setReceipt({ ...receipt, payerName: `${member.firstName} ${member.lastName}` });
+    console.log('Selected member:', member);
+    
+    // Get the member's branch - the member has branchID, we need to find the corresponding branch
+    const memberBranch = branches.find(b => b.id === member.branchID);
+    
+    const branchCode = memberBranch?.branchCode || "";
+    
+    console.log('Member branch match:', {
+      memberBranchID: member.branchID,
+      foundBranch: memberBranch,
+      branchCode: branchCode
+    });
+    
+    setReceipt({ 
+      ...receipt, 
+      payerName: `${member.firstName} ${member.lastName}`,
+      branchCode: branchCode,
+      revenueHeadCode: "" // Reset selection when member changes
+    });
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setSelectedMember(member);
     setShowMemberDropdown(false);
@@ -188,17 +301,6 @@ const ReceiptingPage = () => {
       paymentType: type,
       revenueHeadCode: "" // Reset selection when changing type
     });
-  };
-
-  const handleBranchChange = (branchCode: string) => {
-    setReceipt(prev => ({ 
-      ...prev, 
-      branchCode,
-      // Only clear revenue head if the current selection is not available in the new branch
-      revenueHeadCode: prev.revenueHeadCode && availableOptions.some(opt => 
-        (opt.code || opt.id) === prev.revenueHeadCode
-      ) ? prev.revenueHeadCode : ""
-    }));
   };
 
   const showModal = (message: string, title: string, type: "info" | "error" | "success") => {
@@ -288,29 +390,61 @@ const ReceiptingPage = () => {
 
     try {
       const selectedBranch = branches.find(b => b.branchCode === receipt.branchCode);
-      const paymentMethodId = paymentMethodMap[receipt.paymentMethod];
+      
+      let paymentMethodId = paymentMethodMap[receipt.paymentMethod];
+      
+      // Fallback if payment method ID is not found
+      if (isNaN(paymentMethodId)) {
+        console.warn('Payment method ID not found, using fallback mapping');
+        const fallbackMap: Record<string, number> = {
+          'Cash': 1,
+          'Card': 2,
+          'Bank Transfer': 3,
+          'Mobile Money': 4,
+          'Check': 5
+        };
+        paymentMethodId = fallbackMap[receipt.paymentMethod] || 1; // Default to Cash (1)
+        console.log('Using fallback payment method ID:', paymentMethodId);
+      }
 
       if (!selectedBranch) {
         throw new Error("Selected branch not found");
       }
 
+      // Ensure all IDs are properly converted to numbers
+      const memberId = Number(selectedMember.id);
+      const branchId = Number(selectedBranch.id);
+
+      console.log('ID validation:', {
+        memberId,
+        branchId,
+        paymentMethodId,
+        isNaNMemberId: isNaN(memberId),
+        isNaNBranchId: isNaN(branchId),
+        isNaNPaymentMethodId: isNaN(paymentMethodId)
+      });
+
+      if (isNaN(memberId) || isNaN(branchId) || isNaN(paymentMethodId)) {
+        throw new Error(`Invalid ID format detected: memberId=${memberId}, branchId=${branchId}, paymentMethodId=${paymentMethodId}`);
+      }
+
       if (receipt.paymentType === 'project') {
         // Handle project contribution
-        const selectedProject = projects.find(p => 
-          p.revenueHeadCode === receipt.revenueHeadCode || p.id.toString() === receipt.revenueHeadCode
-        );
+        const selectedProject = projects.find(p => p.id === receipt.revenueHeadCode);
 
         if (!selectedProject) {
           throw new Error("Selected project not found");
         }
 
+        const projectId = Number(selectedProject.id);
+
         const contributionData = {
-          projectId: selectedProject.id,
-          memberId: selectedMember.id,
+          projectId: projectId,
+          memberId: memberId,
           amount: parseFloat(receipt.amount),
-          branchId: selectedBranch.id,
+          branchId: branchId,
           paymentMethodId: paymentMethodId,
-          processedByUserId: currentUser?.id || 1 // Use current user ID or default
+          processedByUserId: currentUser?.id || 1
         };
 
         console.log("Creating project contribution:", contributionData);
@@ -325,13 +459,15 @@ const ReceiptingPage = () => {
           throw new Error("Selected revenue head not found");
         }
 
+        const revenueHeadId = Number(selectedRevenueHead.id);
+
         const transactionData = {
-          memberId: selectedMember.id,
-          revenueHeadId: selectedRevenueHead.id,
+          memberId: memberId,
+          revenueHeadId: revenueHeadId,
           amount: parseFloat(receipt.amount),
           currency: receipt.currency,
-          branchId: selectedBranch.id,
-          userId: currentUser?.id || 1, // Use current user ID or default
+          branchId: branchId,
+          userId: currentUser?.id || 1,
           transactionDate: new Date().toISOString()
         };
 
@@ -379,7 +515,7 @@ const ReceiptingPage = () => {
           <div><span className="font-bold">Type:</span> {receipt.paymentType === 'project' ? 'Project Contribution' : 'Revenue Payment'}</div>
           <div><span className="font-bold">Description:</span> {
             receipt.paymentType === 'project' 
-              ? projects.find(p => p.revenueHeadCode === receipt.revenueHeadCode)?.title || "---"
+              ? projects.find(p => p.id === receipt.revenueHeadCode)?.title || "---"
               : revenueHeads.find(r => r.code === receipt.revenueHeadCode)?.name || "---"
           }</div>
           <div><span className="font-bold">Amount:</span> {receipt.currency} {(parseFloat(receipt.amount) || 0).toFixed(2)}</div>
@@ -511,14 +647,34 @@ const ReceiptingPage = () => {
                   onChange={(e) => setReceipt({ ...receipt, revenueHeadCode: e.target.value })}
                   className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
                 >
-                  <option value="">Select {receipt.paymentType === 'project' ? 'Project' : 'Revenue Head'}</option>
+                  <option value="">
+                    {!receipt.branchCode 
+                      ? "Select a member first to see available options" 
+                      : availableOptions.length === 0
+                      ? `No ${receipt.paymentType === 'project' ? 'projects' : 'revenue heads'} available for this branch`
+                      : `Select ${receipt.paymentType === 'project' ? 'Project' : 'Revenue Head'}`
+                    }
+                  </option>
                   {availableOptions.map((option) => (
-                    <option key={option.code || option.id} value={option.code || option.id}>
-                      {option.name || option.title}
-                      {receipt.paymentType === 'project' && ` (${option.status})`}
+                    <option 
+                      key={receipt.paymentType === 'project' ? option.id : option.code} 
+                      value={receipt.paymentType === 'project' ? option.id : option.code}
+                    >
+                      {receipt.paymentType === 'project' ? option.title : option.name}
+                      {receipt.paymentType === 'project' && option.status && ` (${option.status})`}
                     </option>
                   ))}
                 </select>
+                {!receipt.branchCode && (
+                  <p className="text-sm text-yellow-600">
+                    Please select a member first to see available {receipt.paymentType === 'project' ? 'projects' : 'revenue heads'}
+                  </p>
+                )}
+                {receipt.branchCode && availableOptions.length === 0 && (
+                  <p className="text-sm text-red-600">
+                    No {receipt.paymentType === 'project' ? 'projects' : 'revenue heads'} available for the selected branch
+                  </p>
+                )}
               </div>
 
               {/* Amount */}
@@ -579,24 +735,21 @@ const ReceiptingPage = () => {
                 </div>
               </div>
 
-              {/* Branch */}
+              {/* Branch Display (Read-only) */}
               <div className="space-y-3">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                   <Building className="w-4 h-4" />
                   Branch *
                 </label>
-                <select
-                  value={receipt.branchCode}
-                  onChange={(e) => handleBranchChange(e.target.value)}
-                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.branchCode}>
-                      {branch.branchName}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full px-4 py-3.5 border border-gray-300 rounded-xl bg-gray-50 text-gray-700">
+                  {receipt.branchCode 
+                    ? branches.find(b => b.branchCode === receipt.branchCode)?.branchName || "Branch not found"
+                    : "Select a member to auto-assign branch"
+                  }
+                </div>
+                <p className="text-sm text-gray-500">
+                  Branch is automatically assigned from the selected member's branch
+                </p>
               </div>
 
               {/* Generate Button */}
@@ -642,7 +795,7 @@ const ReceiptingPage = () => {
                   <div><span className="font-semibold">Type:</span> {receipt.paymentType === 'project' ? 'Project Contribution' : 'Revenue Payment'}</div>
                   <div><span className="font-semibold">Description:</span> {
                     receipt.paymentType === 'project' 
-                      ? projects.find(p => p.revenueHeadCode === receipt.revenueHeadCode)?.title || "---"
+                      ? projects.find(p => p.id === receipt.revenueHeadCode)?.title || "---"
                       : revenueHeads.find(r => r.code === receipt.revenueHeadCode)?.name || "---"
                   }</div>
                   <div><span className="font-semibold">Amount:</span> {receipt.currency} {(parseFloat(receipt.amount) || 0).toFixed(2)}</div>
