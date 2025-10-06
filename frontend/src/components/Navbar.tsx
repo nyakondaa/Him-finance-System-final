@@ -107,7 +107,7 @@ const Navbar = ({ onCollapseChange }) => {
         { to: "/users", icon: <Users className="w-5 h-5" />, text: "User Management" },
         { to: "/members", icon: <User className="w-5 h-5" />, text: "Members" },
         { to: "/expenses", icon: <DollarSign className="w-5 h-5" />, text: "Expenses" },
-        { to: "/payment-management", icon: <CreditCard className="w-5 h-5" />, text: "Payments" },
+        
         { to: "/project-board", icon: <Trello className="w-5 h-5" />, text: "Projects" },
         { to: "/settings", icon: <Settings className="w-5 h-5" />, text: "Settings" },
     ];
