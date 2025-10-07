@@ -1,7 +1,8 @@
 import type { Transaction,ContributionCreateRequest,ContributionResponse } from "@/utils/Types";
+// in your JS/TS file
+const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL;
 
-let BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
- 
+console.log(BASE_URL); // Will log the value from Vercel or .env
 
 
 
