@@ -358,7 +358,7 @@ const ReceiptingPage = () => {
         if (cw && "onafterprint" in cw) {
           (cw as any).onafterprint = cleanup;
         }
-        setTimeout(cleanup, 100);
+        setTimeout(cleanup, 8000);
         cw?.print();
       };
 
