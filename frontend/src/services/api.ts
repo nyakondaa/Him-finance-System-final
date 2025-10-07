@@ -1,6 +1,6 @@
 import type { Transaction,ContributionCreateRequest,ContributionResponse } from "@/utils/Types";
 
-let BASE_URL = "http://localhost:8080/api";
+let BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
  
 
 

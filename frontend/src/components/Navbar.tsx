@@ -99,14 +99,15 @@ const Navbar = ({ onCollapseChange }) => {
     const navigationItems = [
         { to: "/", icon: <Home className="w-5 h-5" />, text: "Dashboard" },
         { to: "/receipting", icon: <Receipt className="w-5 h-5" />, text: "Payments" },
-        { to: "/reports", icon: <BarChart3 className="w-5 h-5" />, text: "Reports" },
+        
         { to: "/transactions", icon: <Banknote className="w-5 h-5" />, text: "Accounts" },
+         { to: "/expenses", icon: <DollarSign className="w-5 h-5" />, text: "Expenses" },
     ];
 
     const adminItems = [
         { to: "/users", icon: <Users className="w-5 h-5" />, text: "User Management" },
         { to: "/members", icon: <User className="w-5 h-5" />, text: "Members" },
-        { to: "/expenses", icon: <DollarSign className="w-5 h-5" />, text: "Expenses" },
+       
         
         { to: "/project-board", icon: <Trello className="w-5 h-5" />, text: "Projects" },
         { to: "/settings", icon: <Settings className="w-5 h-5" />, text: "Settings" },
