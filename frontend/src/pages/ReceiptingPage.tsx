@@ -358,7 +358,7 @@ const ReceiptingPage = () => {
         if (cw && "onafterprint" in cw) {
           (cw as any).onafterprint = cleanup;
         }
-        setTimeout(cleanup, 15000);
+        setTimeout(cleanup, 100);
         cw?.print();
       };
 
@@ -562,7 +562,7 @@ const ReceiptingPage = () => {
               </div>
               <div>
                 <h1 className="text-4xl font-bold text-gray-900 mb-1">
-                  Receipt Generation
+                  Payments
                 </h1>
                 <p className="text-gray-600 text-lg">
                   Process project contributions and revenue payments

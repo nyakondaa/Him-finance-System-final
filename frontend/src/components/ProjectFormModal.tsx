@@ -161,7 +161,7 @@ const ProjectFormModal = ({ project, onClose, onCreate, onUpdate, isLoading }) =
                                             <option value="">Select a branch</option>
                                             {branches.map(branch => (
                                                 <option key={branch.id} value={branch.id}>
-                                                    {branch.name}
+                                                    {branch.branchName}
                                                 </option>
                                             ))}
                                         </select>
