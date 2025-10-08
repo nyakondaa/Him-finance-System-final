@@ -129,6 +129,7 @@ const LoginPage = () => {
           </div>
 
           {/* Error Display */}
+          {console.log("the following error happened", error)}
           {error && (
             <div className="p-3 bg-rose-100 border border-rose-300 rounded-lg">
               <div className="flex items-start text-sm text-rose-800">

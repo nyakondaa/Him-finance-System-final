@@ -1,6 +1,11 @@
 import type { Transaction,ContributionCreateRequest,ContributionResponse } from "@/utils/Types";
-// in your JS/TS file
-const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL;
+
+
+const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL; 
+
+
+//for test
+
 
 console.log(BASE_URL); // Will log the value from Vercel or .env
 
@@ -34,25 +39,23 @@ const apiClient = async (
     const response = await fetch(url, config);
 
     if (!response.ok) {
-      // First try to get the response as text
-      const errorText = await response.text();
-      let errorMessage = "An unexpected error occurred.";
-      
-      if (errorText) {
-        try {
-          // Try to parse as JSON
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorText;
-        } catch {
-          // If not JSON, use the text as error message
-          errorMessage = errorText;
-        }
-      } else {
-        errorMessage = `API request failed with status ${response.status}`;
-      }
-      
-      throw new Error(errorMessage);
+  const errorText = await response.text();
+  let errorMessage = "An unexpected error occurred.";
+  
+  if (errorText) {
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error || errorData.message || errorText;
+    } catch {
+      errorMessage = errorText;
     }
+  } else {
+    errorMessage = `API request failed with status ${response.status}`;
+  }
+
+  throw new Error(errorMessage);
+}
+
 
     if (options?.isBlob) {
       return await response.blob();
