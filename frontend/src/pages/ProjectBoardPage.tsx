@@ -39,7 +39,7 @@ import { formatCurrency } from "../utils/helpers";
 import ProjectFormModal from "@/components/ProjectFormModal";
 
 // Progress calculation helper
-const calculateProgress = (current, goal) => {
+export const calculateProgress = (current, goal) => {
   if (!goal || goal === 0) return 0;
   const progress = (current / goal) * 100;
   return Math.min(Math.round(progress * 100) / 100, 100);
