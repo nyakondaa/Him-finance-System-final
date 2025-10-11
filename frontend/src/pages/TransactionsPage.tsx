@@ -40,13 +40,14 @@ interface TransactionDetail {
   status: 'success' | 'pending' | 'failed';
   transactionHash?: string;
   branch?: string;
-  revenueHead?: string;
+  revenueHeadsName?: string;
   notes?: string;
   originalAmount?: number; // Raw number for sorting/analytics
   currency?: string;
   branchCode?: string; // For filtering
   revenueHeadCode?: string; // For filtering
   memberId?: string | number;
+  userID?: string | number
 }
 
 interface AnalyticsData {
@@ -310,6 +311,7 @@ const TransactionRow: React.FC<{
       <td className="px-6 py-4 whitespace-nowrap text-right">
         <MoreVertical className="w-4 h-4 text-slate-400 hover:text-slate-800" />
       </td>
+      
     </tr>
   );
 };
@@ -356,7 +358,7 @@ const TransactionDetails: React.FC<{ transaction: TransactionDetail | null }> = 
           <DetailItem label="Customer/Payer" value={transaction.customer} icon={User} />
           <DetailItem label="Payment Method" value={transaction.method} icon={CreditCard} />
           <DetailItem label="Transaction ID" value={transaction.transactionHash || 'N/A'} icon={Hash} isMono />
-          <DetailItem label="Revenue Head" value={transaction.revenueHead || 'General Fund'} icon={Target} />
+          <DetailItem label="Revenue Head" value={transaction.revenueHeadsName || ""} icon={Target} />
           <DetailItem label="Branch" value={transaction.branch || 'Head Office'} icon={Building} />
         </div>
         
@@ -478,6 +480,8 @@ export default function TransactionsPage() {
     const incomeTransactions = (transactions || []).map((tx: any) => {
       const amount = parseFloat(tx.amount || '0');
       const memberIdKey = tx.memberId ? String(tx.memberId) : undefined;
+
+      console.log("income transactions", transactions)
       
       let customerName = 'General Payer';
 
@@ -504,7 +508,7 @@ export default function TransactionsPage() {
         status: (tx.status === 'completed' || tx.status === 'success' ? 'success' : 'pending') as 'success' | 'pending' | 'failed',
         transactionHash: tx.rrn || tx.receiptNumber || `TXN-${tx.id}`,
         branch: tx.branch?.name || tx.branchName,
-        revenueHead: tx.revenueHead?.name || tx.revenueHeadName,
+        revenueHeadsName: tx.revenueHeadsName ,
         notes: tx.notes,
         originalAmount: amount,
         currency: tx.currency || 'USD',
@@ -542,7 +546,7 @@ export default function TransactionsPage() {
   // --- FILTER AND SORT LOGIC (All Filters Integrated) ---
   const filteredTransactions = useMemo(() => {
     let filtered = transactionDetails;
-
+  
     // 1. Filter by DATE RANGE
     if (dateRange !== 'custom') {
       const { start } = getDateRange(dateRange);

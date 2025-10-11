@@ -448,6 +448,7 @@ export const updateRevenueHead = (code: any, headData: any) =>
   apiClient(`/revenue-heads/${code}`, "PUT", headData);
 export const deleteRevenueHead = (code: any) =>
   apiClient(`/revenue-heads/${code}`, "DELETE");
+export const getRevenueHeadsById = (code: number) => apiClient(`/revenue-heads/${code}`)
 
 // --- EXPENDITURE HEADS ---
 

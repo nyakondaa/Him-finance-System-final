@@ -88,6 +88,8 @@ const useAccountsData = () => {
         ? paymentMethodsRes
         : paymentMethodsRes?.data || paymentMethodsRes?.paymentMethods || [];
 
+        console.log("here is the transactons data from hook", transactionsData)
+
       if (!revenueHeadsData.length || !expenditureHeadsData.length) {
         throw new Error("Missing essential account data (revenue heads or expenditure heads)");
       }
@@ -108,10 +110,12 @@ const useAccountsData = () => {
         const methodName =
           paymentMethodMap.get(tx.paymentMethodId) || tx.paymentMethod?.name || "Unknown";
 
+      
+
         return {
           id: tx.id,
-          receiptNumber: tx.receiptNumber || tx.rrn || `TX-${tx.id}`,
-          revenueHeadCode: tx.revenueHeadCode || tx.revenueHead?.code || "",
+          receiptNumber: tx.receiptNumber || tx.rrn || `TX-${tx.id}`,          
+          revenueHeadsName: tx.revenueHeadName,
           amount: String(tx.amount || 0),
           branchCode: tx.branchCode || tx.branch?.branchCode || "",
           transactionDate: tx.transactionDate || tx.createdAt,
@@ -120,7 +124,7 @@ const useAccountsData = () => {
           memberId: tx.memberId || tx.member?.id,
           notes: tx.notes,
           paymentMethodId: tx.paymentMethodId || tx.paymentMethod?.id,
-          paymentMethod: { id: tx.paymentMethodId, name: methodName },
+          paymentMethod: { name: paymentMethodsData.find((p: any) => p.code === tx.paymentMethodId)?.name || "Unknown",},
           referenceNumber: tx.referenceNumber,
           status: tx.status || "completed",
           updatedAt: tx.updatedAt,
